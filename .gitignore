@@ -1,0 +1,8 @@
+/build/
+/.venv/
+Makefile.local.mk
+*.d/
+.env
+*.log
+out.txt
+testbuild/
