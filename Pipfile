@@ -4,11 +4,14 @@ verify_ssl = true
 name = "pypi"
 
 [packages]
-impresso-mallet-lda = {git = "https://github.com/impresso/impresso-mallet-topic-inference.git", ref = "main", subdirectory = "lib"}
+# Core Impresso library
+impresso-cookbook = {editable = true, path = "./cookbook/lib"}
 
+impresso-mallet-lda = {git = "https://github.com/impresso/impresso-mallet-topic-inference.git", ref = "main", subdirectory = "lib"}
 python-dotenv = "*"
 smart-open = {extras = ["s3"]}
 boto3 = "==1.35.95"
+jq = "*"
 
 [dev-packages]
 
