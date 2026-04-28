@@ -1,6 +1,10 @@
 SHELL := /bin/bash
 
 CONFIG_LOCAL_MAKE ?= config.local.mk
+ifdef CFG
+  CONFIG_LOCAL_MAKE := $(CFG)
+  $(info Overriding CONFIG_LOCAL_MAKE to $(CONFIG_LOCAL_MAKE) from CFG variable)
+endif
 -include $(CONFIG_LOCAL_MAKE)
 
 BUILD_DIR ?= build
