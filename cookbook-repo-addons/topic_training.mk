@@ -1,0 +1,279 @@
+###############################################################################
+# MALLET TOPIC TRAINING TARGETS
+#
+# Repo-specific model training add-on. The cookbook provides common setup,
+# logging, S3 credentials, and path conventions; this file owns the
+# topic-training pipeline and artifact contract.
+###############################################################################
+
+$(call log.debug, COOKBOOK BEGIN INCLUDE: cookbook-repo-addons/topic_training.mk)
+
+PYTHON ?= python3
+
+TOPIC_TRAIN_BUCKET ?= 130-component-sandbox
+TOPIC_TRAIN_FINAL_BUCKET ?= 132-component-final
+TOPIC_TRAIN_PREFIX ?= topics-mallet
+TOPIC_TRAIN_RUN_ID ?= tm-training-v1
+TOPIC_TRAIN_LANGS ?= de fr en lb
+
+S3_BUCKET_LINGPROC_COMPONENT ?= UNCONFIGURED-LINGPROC-COMPONENT-BUCKET
+RUN_ID_LINGPROC ?= UNCONFIGURED-LINGPROC-RUN-ID
+PATH_LINGPROC_BASE ?= UNCONFIGURED-LINGPROC-BASE-PATH
+NEWSPAPERS_TO_PROCESS_FILE ?= /dev/null
+
+S3_TOPIC_TRAIN_BASE_PATH := s3://$(TOPIC_TRAIN_BUCKET)/$(TOPIC_TRAIN_PREFIX)/$(TOPIC_TRAIN_RUN_ID)
+LOCAL_TOPIC_TRAIN_BASE_PATH := $(BUILD_DIR)/$(TOPIC_TRAIN_BUCKET)/$(TOPIC_TRAIN_PREFIX)/$(TOPIC_TRAIN_RUN_ID)
+
+S3_TOPIC_TRAIN_FINAL_BASE_PATH := s3://$(TOPIC_TRAIN_FINAL_BUCKET)/$(TOPIC_TRAIN_PREFIX)/$(TOPIC_TRAIN_RUN_ID)
+
+TOPIC_TRAIN_LEMMAFREQ_SELECTION_LABEL ?= upos-PROPN_NOUN.minlength-2
+S3_TOPIC_TRAIN_LEMMAFREQ_BASE ?= s3://$(S3_BUCKET_LINGPROC_COMPONENT)/lemma-freq/$(RUN_ID_LINGPROC)
+topic_train_lemmafreq_s3 = $(S3_TOPIC_TRAIN_LEMMAFREQ_BASE)/$(1)/ALL.$(TOPIC_TRAIN_LEMMAFREQ_SELECTION_LABEL).lemmafreq.json.bz2
+
+TOPIC_TRAIN_LINGPROC_S3_PREFIX ?= s3://$(PATH_LINGPROC_BASE)
+TOPIC_TRAIN_INPUT_SUFFIX ?= .jsonl.bz2
+
+TOPIC_TRAIN_POS_TAGS ?= PROPN,NOUN
+TOPIC_TRAIN_MIN_LEMMA_LENGTH ?= 3
+TOPIC_TRAIN_VOCAB_MIN_FREQ ?= 400
+TOPIC_TRAIN_VOCAB_MAX_FREQ ?= 2000000
+TOPIC_TRAIN_NEGATIVE_LIST_DIR ?= resources/negativelemmas
+TOPIC_TRAIN_INCLUDE_VOCAB_DIR ?= resources/include-vocab
+TOPIC_TRAIN_EXCLUDE_VOCAB_DIR ?= resources/exclude-vocab
+
+TOPIC_TRAIN_MIN_VOCAB_TOKENS ?= 10
+TOPIC_TRAIN_MIN_UNIQUE_LEMMAS ?= 5
+TOPIC_TRAIN_MAX_TOKENS ?= 1500
+TOPIC_TRAIN_INCLUDE_TITLES ?= true
+
+TOPIC_TRAIN_SAMPLE_SIZE ?= 1000000
+TOPIC_TRAIN_SAMPLE_SEED ?= 42
+TOPIC_TRAIN_SAMPLE_STRATA ?= newspaper,decade
+TOPIC_TRAIN_SAMPLE_MIN_PER_STRATUM ?= 0
+TOPIC_TRAIN_SAMPLE_MAX_PER_STRATUM ?=
+
+MALLET ?= ./mallet/bin/mallet
+MALLET_NUM_TOPICS ?= 1000
+MALLET_TRAIN_ITERATIONS ?= 1000
+MALLET_OPTIMIZE_INTERVAL ?= 10
+MALLET_THREADS ?= 8
+MALLET_TRAIN_MEMORY ?= 64g
+MALLET_STD_MEMORY ?= 16g
+MALLET_RANDOM_SEED ?= 42
+MALLET_SMOKE_DOCS ?= 1000
+MALLET_SMOKE_INFER_ITERATIONS ?= 100
+MALLET_TOPIC_ASSIGNMENT_THRESHOLD ?= 0.02
+TOPIC_TRAIN_WORD_THRESHOLD ?= 200
+
+topic_train_vocab_s3 = $(S3_TOPIC_TRAIN_BASE_PATH)/vocab/$(1).vocab.tsv.bz2
+topic_train_vocab_meta_s3 = $(S3_TOPIC_TRAIN_BASE_PATH)/vocab/$(1).vocab.metadata.json
+topic_train_eligible_s3 = $(S3_TOPIC_TRAIN_BASE_PATH)/eligible/$(2)/$(1).eligible.tsv.bz2
+topic_train_eligible_stats_s3 = $(S3_TOPIC_TRAIN_BASE_PATH)/eligible/$(2)/$(1).stats.json
+topic_train_sample_s3 = $(S3_TOPIC_TRAIN_BASE_PATH)/sample/$(1)/sample.tsv.bz2
+topic_train_sample_manifest_s3 = $(S3_TOPIC_TRAIN_BASE_PATH)/sample/$(1)/sample.manifest.json
+
+topic_train_local_dir = $(LOCAL_TOPIC_TRAIN_BASE_PATH)/$(1)
+topic_train_sample_local = $(LOCAL_TOPIC_TRAIN_BASE_PATH)/sample/$(1)/sample.tsv
+topic_train_sample_mallet_local = $(LOCAL_TOPIC_TRAIN_BASE_PATH)/mallet/$(1).sample.mallet
+topic_train_model_local = $(LOCAL_TOPIC_TRAIN_BASE_PATH)/models/$(1).model
+topic_train_inferencer_local = $(LOCAL_TOPIC_TRAIN_BASE_PATH)/models/$(1).inferencer
+topic_train_topickeys_local = $(LOCAL_TOPIC_TRAIN_BASE_PATH)/models/$(1).topickeys
+topic_train_topicwordweights_local = $(LOCAL_TOPIC_TRAIN_BASE_PATH)/models/$(1).topicwordweights
+topic_train_sample_doctopics_local = $(LOCAL_TOPIC_TRAIN_BASE_PATH)/models/$(1).sample.doctopics
+topic_train_description_local = $(LOCAL_TOPIC_TRAIN_BASE_PATH)/jsonl/$(1).topic_model_topic_description.jsonl.bz2
+topic_train_smoke_sample_local = $(LOCAL_TOPIC_TRAIN_BASE_PATH)/smoke/$(1).sample.tsv
+topic_train_smoke_mallet_local = $(LOCAL_TOPIC_TRAIN_BASE_PATH)/smoke/$(1).sample.mallet
+topic_train_smoke_doctopics_local = $(LOCAL_TOPIC_TRAIN_BASE_PATH)/smoke/$(1).doctopics
+topic_train_smoke_assignment_plain_local = $(LOCAL_TOPIC_TRAIN_BASE_PATH)/smoke/$(1).topic_assignment.jsonl
+topic_train_smoke_assignment_local = $(LOCAL_TOPIC_TRAIN_BASE_PATH)/smoke/$(1).topic_assignment.jsonl.bz2
+topic_train_metadata_local = $(LOCAL_TOPIC_TRAIN_BASE_PATH)/metadata/$(1).training.json
+
+topic_train_model_s3 = $(S3_TOPIC_TRAIN_BASE_PATH)/models/$(1).model
+topic_train_sample_mallet_s3 = $(S3_TOPIC_TRAIN_BASE_PATH)/mallet/$(1).sample.mallet
+topic_train_inferencer_s3 = $(S3_TOPIC_TRAIN_BASE_PATH)/models/$(1).inferencer
+topic_train_topickeys_s3 = $(S3_TOPIC_TRAIN_BASE_PATH)/models/$(1).topickeys
+topic_train_topicwordweights_s3 = $(S3_TOPIC_TRAIN_BASE_PATH)/models/$(1).topicwordweights
+topic_train_sample_doctopics_s3 = $(S3_TOPIC_TRAIN_BASE_PATH)/models/$(1).sample.doctopics
+topic_train_description_s3 = $(S3_TOPIC_TRAIN_BASE_PATH)/jsonl/$(1).topic_model_topic_description.jsonl.bz2
+topic_train_smoke_doctopics_s3 = $(S3_TOPIC_TRAIN_BASE_PATH)/smoke/$(1).doctopics
+topic_train_smoke_assignment_s3 = $(S3_TOPIC_TRAIN_BASE_PATH)/smoke/$(1).topic_assignment.jsonl.bz2
+topic_train_metadata_s3 = $(S3_TOPIC_TRAIN_BASE_PATH)/metadata/$(1).training.json
+topic_train_final_vocab_s3 = $(S3_TOPIC_TRAIN_FINAL_BASE_PATH)/vocab/$(1).vocab.tsv.bz2
+topic_train_final_vocab_meta_s3 = $(S3_TOPIC_TRAIN_FINAL_BASE_PATH)/vocab/$(1).vocab.metadata.json
+topic_train_final_sample_manifest_s3 = $(S3_TOPIC_TRAIN_FINAL_BASE_PATH)/sample/$(1)/sample.manifest.json
+topic_train_final_sample_mallet_s3 = $(S3_TOPIC_TRAIN_FINAL_BASE_PATH)/mallet/$(1).sample.mallet
+topic_train_final_model_s3 = $(S3_TOPIC_TRAIN_FINAL_BASE_PATH)/models/$(1).model
+topic_train_final_inferencer_s3 = $(S3_TOPIC_TRAIN_FINAL_BASE_PATH)/models/$(1).inferencer
+topic_train_final_topickeys_s3 = $(S3_TOPIC_TRAIN_FINAL_BASE_PATH)/models/$(1).topickeys
+topic_train_final_topicwordweights_s3 = $(S3_TOPIC_TRAIN_FINAL_BASE_PATH)/models/$(1).topicwordweights
+topic_train_final_sample_doctopics_s3 = $(S3_TOPIC_TRAIN_FINAL_BASE_PATH)/models/$(1).sample.doctopics
+topic_train_final_description_s3 = $(S3_TOPIC_TRAIN_FINAL_BASE_PATH)/jsonl/$(1).topic_model_topic_description.jsonl.bz2
+topic_train_final_smoke_assignment_s3 = $(S3_TOPIC_TRAIN_FINAL_BASE_PATH)/smoke/$(1).topic_assignment.jsonl.bz2
+topic_train_final_metadata_s3 = $(S3_TOPIC_TRAIN_FINAL_BASE_PATH)/metadata/$(1).training.json
+
+.NOTINTERMEDIATE: topic-training-import-% topic-training-train-% topic-training-describe-% topic-training-smoke-infer-%
+.SECONDARY: topic-training-import-% topic-training-train-% topic-training-describe-% topic-training-smoke-infer-%
+.PHONY: FORCE
+FORCE:
+
+.PHONY: topic-training-help
+topic-training-help:
+	@echo "Topic training targets:"
+	@echo "  topic-training-vocab-LANG"
+	@echo "  topic-training-eligible-newspaper LANG=de NEWSPAPER=BL/AATA"
+	@echo "  topic-training-eligible-LANG"
+	@echo "  topic-training-sample-LANG"
+	@echo "  topic-training-import-LANG"
+	@echo "  topic-training-train-LANG"
+	@echo "  topic-training-describe-LANG"
+	@echo "  topic-training-smoke-infer-LANG"
+	@echo "  topic-training-publish-LANG"
+	@echo "  topic-training-all-LANG"
+	@echo "S3 base: $(S3_TOPIC_TRAIN_BASE_PATH)"
+	@echo "Final base: $(S3_TOPIC_TRAIN_FINAL_BASE_PATH)"
+
+topic-training-vocab-%: FORCE
+	@mkdir -p $(LOCAL_TOPIC_TRAIN_BASE_PATH)/logs
+	$(PYTHON) lib/topic_vocab.py \
+		--lemmafreq $(call topic_train_lemmafreq_s3,$*) \
+		--language $* \
+		--min-frequency $(TOPIC_TRAIN_VOCAB_MIN_FREQ) \
+		--max-frequency $(TOPIC_TRAIN_VOCAB_MAX_FREQ) \
+		--min-length $(TOPIC_TRAIN_MIN_LEMMA_LENGTH) \
+		--negative-list $(TOPIC_TRAIN_NEGATIVE_LIST_DIR)/$*.txt \
+		$(if $(wildcard $(TOPIC_TRAIN_INCLUDE_VOCAB_DIR)/$*.txt),--include-vocab $(TOPIC_TRAIN_INCLUDE_VOCAB_DIR)/$*.txt,) \
+		$(if $(wildcard $(TOPIC_TRAIN_EXCLUDE_VOCAB_DIR)/$*.txt),--exclude-vocab $(TOPIC_TRAIN_EXCLUDE_VOCAB_DIR)/$*.txt,) \
+		--output $(call topic_train_vocab_s3,$*) \
+		--metadata-output $(call topic_train_vocab_meta_s3,$*) \
+		--run-id $(TOPIC_TRAIN_RUN_ID)
+
+.PHONY: topic-training-eligible-newspaper
+topic-training-eligible-newspaper:
+	@test -n "$(LANG)" || (echo "LANG is required"; exit 2)
+	@test -n "$(NEWSPAPER)" || (echo "NEWSPAPER is required"; exit 2)
+	$(PYTHON) lib/extract_eligible_texts.py \
+		--s3-prefix $(TOPIC_TRAIN_LINGPROC_S3_PREFIX)/$(NEWSPAPER) \
+		--input-suffix $(TOPIC_TRAIN_INPUT_SUFFIX) \
+		--vocab $(call topic_train_vocab_s3,$(LANG)) \
+		--language $(LANG) \
+		--pos-tags $(TOPIC_TRAIN_POS_TAGS) \
+		--min-lemma-length $(TOPIC_TRAIN_MIN_LEMMA_LENGTH) \
+		--min-vocab-tokens $(TOPIC_TRAIN_MIN_VOCAB_TOKENS) \
+		--min-unique-lemmas $(TOPIC_TRAIN_MIN_UNIQUE_LEMMAS) \
+		--max-tokens $(TOPIC_TRAIN_MAX_TOKENS) \
+		$(if $(filter true,$(TOPIC_TRAIN_INCLUDE_TITLES)),--include-titles,) \
+		--output $(call topic_train_eligible_s3,$(NEWSPAPER),$(LANG)) \
+		--stats-output $(call topic_train_eligible_stats_s3,$(NEWSPAPER),$(LANG)) \
+		--run-id $(TOPIC_TRAIN_RUN_ID)
+
+topic-training-eligible-%: FORCE
+	@while read newspaper; do \
+		test -z "$$newspaper" && continue; \
+		$(MAKE) topic-training-eligible-newspaper LANG=$* NEWSPAPER=$$newspaper; \
+	done < $(NEWSPAPERS_TO_PROCESS_FILE)
+
+topic-training-sample-%: FORCE
+	$(PYTHON) lib/stratified_sample.py \
+		--s3-prefix $(S3_TOPIC_TRAIN_BASE_PATH)/eligible/$*/ \
+		--input-suffix .eligible.tsv.bz2 \
+		--sample-size $(TOPIC_TRAIN_SAMPLE_SIZE) \
+		--seed $(TOPIC_TRAIN_SAMPLE_SEED) \
+		--strata $(TOPIC_TRAIN_SAMPLE_STRATA) \
+		--min-per-stratum $(TOPIC_TRAIN_SAMPLE_MIN_PER_STRATUM) \
+		$(if $(TOPIC_TRAIN_SAMPLE_MAX_PER_STRATUM),--max-per-stratum $(TOPIC_TRAIN_SAMPLE_MAX_PER_STRATUM),) \
+		--output $(call topic_train_sample_s3,$*) \
+		--manifest-output $(call topic_train_sample_manifest_s3,$*) \
+		--run-id $(TOPIC_TRAIN_RUN_ID) \
+		--language $*
+
+topic-training-import-%: FORCE
+	@mkdir -p $(LOCAL_TOPIC_TRAIN_BASE_PATH)/sample/$* $(LOCAL_TOPIC_TRAIN_BASE_PATH)/mallet
+	$(PYTHON) lib/copy_uri.py $(call topic_train_sample_s3,$*) $(call topic_train_sample_local,$*)
+	MEMORY=$(MALLET_STD_MEMORY) $(MALLET) import-file \
+		--input $(call topic_train_sample_local,$*) \
+		--output $(call topic_train_sample_mallet_local,$*) \
+		--keep-sequence
+	$(PYTHON) lib/copy_uri.py $(call topic_train_sample_mallet_local,$*) $(call topic_train_sample_mallet_s3,$*)
+
+topic-training-train-%: FORCE
+	$(MAKE) topic-training-import-$*
+	@mkdir -p $(LOCAL_TOPIC_TRAIN_BASE_PATH)/models $(LOCAL_TOPIC_TRAIN_BASE_PATH)/metadata
+	MEMORY=$(MALLET_TRAIN_MEMORY) $(MALLET) train-topics \
+		--input $(call topic_train_sample_mallet_local,$*) \
+		--output-model $(call topic_train_model_local,$*) \
+		--inferencer-filename $(call topic_train_inferencer_local,$*) \
+		--output-topic-keys $(call topic_train_topickeys_local,$*) \
+		--topic-word-weights-file $(call topic_train_topicwordweights_local,$*) \
+		--output-doc-topics $(call topic_train_sample_doctopics_local,$*) \
+		--num-topics $(MALLET_NUM_TOPICS) \
+		--num-iterations $(MALLET_TRAIN_ITERATIONS) \
+		--optimize-interval $(MALLET_OPTIMIZE_INTERVAL) \
+		--num-threads $(MALLET_THREADS) \
+		--random-seed $(MALLET_RANDOM_SEED)
+	$(PYTHON) -c 'import json, datetime; data={"run_id":"$(TOPIC_TRAIN_RUN_ID)","language":"$*","created_at":datetime.datetime.now(datetime.timezone.utc).isoformat(),"mallet":{"num_topics":$(MALLET_NUM_TOPICS),"train_iterations":$(MALLET_TRAIN_ITERATIONS),"optimize_interval":$(MALLET_OPTIMIZE_INTERVAL),"threads":$(MALLET_THREADS),"random_seed":$(MALLET_RANDOM_SEED)},"vocab":"$(call topic_train_vocab_s3,$*)","sample":"$(call topic_train_sample_s3,$*)"}; open("$(call topic_train_metadata_local,$*)","w").write(json.dumps(data, indent=2, sort_keys=True)+"\n")'
+	$(PYTHON) lib/copy_uri.py \
+		$(call topic_train_model_local,$*) $(call topic_train_model_s3,$*) \
+		$(call topic_train_inferencer_local,$*) $(call topic_train_inferencer_s3,$*) \
+		$(call topic_train_topickeys_local,$*) $(call topic_train_topickeys_s3,$*) \
+		$(call topic_train_topicwordweights_local,$*) $(call topic_train_topicwordweights_s3,$*) \
+		$(call topic_train_sample_doctopics_local,$*) $(call topic_train_sample_doctopics_s3,$*) \
+		$(call topic_train_metadata_local,$*) $(call topic_train_metadata_s3,$*)
+
+topic-training-describe-%: FORCE
+	@mkdir -p $(LOCAL_TOPIC_TRAIN_BASE_PATH)/jsonl
+	$(PYTHON) lib/mallet2topic_description_json.py \
+		-L $* \
+		-M tm-$*-$(TOPIC_TRAIN_RUN_ID) \
+		-N $(MALLET_NUM_TOPICS) \
+		-W $(TOPIC_TRAIN_WORD_THRESHOLD) \
+		-o $(call topic_train_description_local,$*) \
+		$(call topic_train_topicwordweights_local,$*)
+	$(PYTHON) lib/copy_uri.py $(call topic_train_description_local,$*) $(call topic_train_description_s3,$*)
+
+topic-training-smoke-infer-%: FORCE
+	@mkdir -p $(LOCAL_TOPIC_TRAIN_BASE_PATH)/smoke
+	head -n $(MALLET_SMOKE_DOCS) $(call topic_train_sample_local,$*) > $(call topic_train_smoke_sample_local,$*)
+	MEMORY=$(MALLET_STD_MEMORY) $(MALLET) import-file \
+		--input $(call topic_train_smoke_sample_local,$*) \
+		--output $(call topic_train_smoke_mallet_local,$*) \
+		--keep-sequence \
+		--use-pipe-from $(call topic_train_sample_mallet_local,$*)
+	MEMORY=$(MALLET_STD_MEMORY) $(MALLET) infer-topics \
+		--inferencer $(call topic_train_inferencer_local,$*) \
+		--input $(call topic_train_smoke_mallet_local,$*) \
+		--num-iterations $(MALLET_SMOKE_INFER_ITERATIONS) \
+		--output-doc-topics $(call topic_train_smoke_doctopics_local,$*) \
+		--random-seed $(MALLET_RANDOM_SEED)
+	$(PYTHON) lib/copy_uri.py $(call topic_train_smoke_doctopics_local,$*) $(call topic_train_smoke_doctopics_s3,$*)
+	$(PYTHON) lib/mallet2topic_assignment_jsonl.py \
+		-L $* \
+		-M tm-$*-$(TOPIC_TRAIN_RUN_ID) \
+		-T $(MALLET_TOPIC_ASSIGNMENT_THRESHOLD) \
+		$(call topic_train_smoke_doctopics_local,$*) > $(call topic_train_smoke_assignment_plain_local,$*)
+	bzip2 -f $(call topic_train_smoke_assignment_plain_local,$*)
+	$(PYTHON) lib/copy_uri.py $(call topic_train_smoke_assignment_local,$*) $(call topic_train_smoke_assignment_s3,$*)
+
+topic-training-publish-%: FORCE
+	$(PYTHON) lib/copy_uri.py \
+		$(call topic_train_vocab_s3,$*) $(call topic_train_final_vocab_s3,$*) \
+		$(call topic_train_vocab_meta_s3,$*) $(call topic_train_final_vocab_meta_s3,$*) \
+		$(call topic_train_sample_manifest_s3,$*) $(call topic_train_final_sample_manifest_s3,$*) \
+		$(call topic_train_sample_mallet_s3,$*) $(call topic_train_final_sample_mallet_s3,$*) \
+		$(call topic_train_model_s3,$*) $(call topic_train_final_model_s3,$*) \
+		$(call topic_train_inferencer_s3,$*) $(call topic_train_final_inferencer_s3,$*) \
+		$(call topic_train_topickeys_s3,$*) $(call topic_train_final_topickeys_s3,$*) \
+		$(call topic_train_topicwordweights_s3,$*) $(call topic_train_final_topicwordweights_s3,$*) \
+		$(call topic_train_sample_doctopics_s3,$*) $(call topic_train_final_sample_doctopics_s3,$*) \
+		$(call topic_train_description_s3,$*) $(call topic_train_final_description_s3,$*) \
+		$(call topic_train_smoke_assignment_s3,$*) $(call topic_train_final_smoke_assignment_s3,$*) \
+		$(call topic_train_metadata_s3,$*) $(call topic_train_final_metadata_s3,$*)
+
+topic-training-all-%: FORCE
+	$(MAKE) topic-training-vocab-$*
+	$(MAKE) topic-training-eligible-$*
+	$(MAKE) topic-training-sample-$*
+	$(MAKE) topic-training-train-$*
+	$(MAKE) topic-training-describe-$*
+	$(MAKE) topic-training-smoke-infer-$*
+
+$(call log.debug, COOKBOOK END INCLUDE: cookbook-repo-addons/topic_training.mk)

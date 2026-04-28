@@ -1,0 +1,35 @@
+SHELL := /bin/bash
+
+CONFIG_LOCAL_MAKE ?= config.local.mk
+-include $(CONFIG_LOCAL_MAKE)
+
+BUILD_DIR ?= build
+LOGGING_LEVEL ?= INFO
+
+ifndef log.debug
+define log.debug
+endef
+endif
+
+ifndef log.info
+define log.info
+$(info $(1))
+endef
+endif
+
+.DEFAULT_GOAL := help
+
+.PHONY: help
+help:
+	@echo "Usage: make <target>"
+	@echo ""
+	@echo "Topic training:"
+	@echo "  make topic-training-help"
+	@echo "  make topic-training-vocab-de"
+	@echo "  make topic-training-eligible-newspaper LANG=de NEWSPAPER=BL/AATA"
+	@echo "  make topic-training-sample-de"
+	@echo "  make topic-training-train-de"
+	@echo ""
+	@echo "Use remake instead of make when running locally on macOS."
+
+include cookbook-repo-addons/topic_training.mk

@@ -6,7 +6,21 @@ import math
 import json
 import re
 import collections
-from smart_open import open
+try:
+    from smart_open import open
+except ModuleNotFoundError:
+    import bz2
+    import builtins
+
+    def open(filename, mode="r", encoding=None):
+        if str(filename).startswith("s3://"):
+            raise RuntimeError("smart_open is required for S3 paths")
+        if str(filename).endswith(".bz2"):
+            bz2_mode = mode if "b" in mode else mode + "t"
+            return bz2.open(filename, bz2_mode, encoding=encoding)
+        if "b" in mode:
+            return builtins.open(filename, mode)
+        return builtins.open(filename, mode, encoding=encoding)
 
 
 def read_tsv_generator(filename):
