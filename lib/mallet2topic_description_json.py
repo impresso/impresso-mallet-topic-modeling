@@ -13,6 +13,9 @@ from typing import Iterable
 from dotenv import load_dotenv
 from smart_open import open as smart_open  # type: ignore
 
+# Load S3 credentials from .env file at module level
+load_dotenv()
+
 try:
     from impresso_cookbook import get_transport_params  # type: ignore
 except ImportError:
@@ -87,8 +90,6 @@ def main() -> int:
     parser.add_argument("--min-probability", type=float, default=0.0001)
     parser.add_argument("-o", "--output", help="Output JSONL path, default stdout")
     args = parser.parse_args()
-
-    load_dotenv()  # Load S3 credentials from .env file
 
     round_digits = math.ceil(abs(math.log10(args.min_probability))) + 1
     out = (

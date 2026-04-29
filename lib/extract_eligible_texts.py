@@ -20,6 +20,9 @@ from smart_open import open as smart_open  # type: ignore
 
 from s3_overwrite import add_force_s3_overwrite_argument, assert_can_write_uri
 
+# Load S3 credentials from .env file at module level
+load_dotenv()
+
 try:
     from impresso_cookbook import (  # type: ignore
         get_s3_client,
@@ -167,8 +170,6 @@ def extract_doc_lemmas(
 
 
 def main() -> int:
-    load_dotenv()  # Load S3 credentials from .env file
-    
     parser = argparse.ArgumentParser(
         description="Create eligible MALLET TSV rows from lingproc JSONL files."
     )

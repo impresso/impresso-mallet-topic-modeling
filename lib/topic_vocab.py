@@ -18,6 +18,9 @@ from smart_open import open as smart_open  # type: ignore
 
 from s3_overwrite import add_force_s3_overwrite_argument, assert_can_write_uri
 
+# Load S3 credentials from .env file at module level
+load_dotenv()
+
 try:
     from impresso_cookbook import get_transport_params  # type: ignore
 except ImportError:
@@ -94,8 +97,6 @@ def write_vocab(path: str, rows: list[tuple[str, int]]) -> None:
 
 
 def main() -> int:
-    load_dotenv()  # Load S3 credentials from .env file
-    
     parser = argparse.ArgumentParser(
         description="Trim an aggregated lemmafreq JSON file into a topic vocabulary."
     )

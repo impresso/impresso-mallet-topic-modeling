@@ -13,6 +13,9 @@ import collections
 from dotenv import load_dotenv
 from smart_open import open
 
+# Load S3 credentials from .env file at module level
+load_dotenv()
+
 try:
     from impresso_cookbook import get_transport_params  # type: ignore
 except ImportError:
@@ -214,8 +217,6 @@ def main():
     """
     Main entry point for the script.
     """
-    load_dotenv()  # Load S3 credentials from .env file
-    
     parser = argparse.ArgumentParser(
         usage="%(prog)s [OPTIONS] [ARGS...]",
         description="Calculate topic assignments from topic modeling output.",

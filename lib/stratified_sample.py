@@ -20,6 +20,9 @@ from dotenv import load_dotenv
 
 from s3_overwrite import add_force_s3_overwrite_argument, assert_can_write_uri
 
+# Load S3 credentials from .env file at module level
+load_dotenv()
+
 try:
     from impresso_cookbook import get_s3_client  # type: ignore
 except ImportError:
@@ -124,8 +127,6 @@ def iter_rows(paths: Iterable[str]) -> Iterable[tuple[str, str]]:
 
 
 def main() -> int:
-    load_dotenv()  # Load S3 credentials from .env file
-    
     parser = argparse.ArgumentParser(
         description="Sample eligible MALLET TSV rows with deterministic stratification."
     )

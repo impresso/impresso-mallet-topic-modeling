@@ -33,8 +33,6 @@ def copy_uri(src: str, dst: str, *, force_s3_overwrite: bool) -> None:
 
 
 def main() -> int:
-    load_dotenv()  # Load S3 credentials from .env file
-    
     parser = argparse.ArgumentParser(description="Copy local/S3 URI pairs.")
     parser.add_argument("pairs", nargs="+", help="Source/destination URI pairs")
     add_force_s3_overwrite_argument(parser)
