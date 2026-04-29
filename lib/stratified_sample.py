@@ -24,7 +24,7 @@ from s3_overwrite import add_force_s3_overwrite_argument, assert_can_write_uri
 load_dotenv()
 
 try:
-    from impresso_cookbook import get_s3_client  # type: ignore
+    from impresso_cookbook import get_s3_client, get_transport_params  # type: ignore
 except ImportError:
     def get_s3_client():
         import boto3
@@ -35,6 +35,18 @@ except ImportError:
             aws_secret_access_key=os.environ.get("SE_SECRET_KEY"),
             endpoint_url=os.environ.get("SE_HOST_URL")
         )
+    
+    def get_transport_params(path: str) -> dict:
+        import os
+        if not path.startswith("s3://"):
+            return {}
+        return {
+            "client_kwargs": {
+                "aws_access_key_id": os.environ.get("SE_ACCESS_KEY"),
+                "aws_secret_access_key": os.environ.get("SE_SECRET_KEY"),
+                "endpoint_url": os.environ.get("SE_HOST_URL")
+            }
+        }
 
 try:
     from smart_open import open as smart_open  # type: ignore
@@ -115,7 +127,7 @@ def score_line(seed: int, ci_id: str) -> int:
 
 def iter_rows(paths: Iterable[str]) -> Iterable[tuple[str, str]]:
     for path in paths:
-        with smart_open(path, "r", encoding="utf-8") as handle:
+        with smart_open(path, "r", encoding="utf-8", transport_params=get_transport_params(path)) as handle:
             for line in handle:
                 row = line.rstrip("\n")
                 if not row:
@@ -203,7 +215,7 @@ def main() -> int:
     selected = unique_candidates[: args.sample_size]
     selected_by_stratum = Counter(stratum for _, stratum, _ in selected)
 
-    with smart_open(args.output, "w", encoding="utf-8") as out:
+    with smart_open(args.output, "w", encoding="utf-8", transport_params=get_transport_params(args.output)) as out:
         for _, _, row in selected:
             out.write(row)
             out.write("\n")
@@ -229,7 +241,7 @@ def main() -> int:
         "stratum_counts": dict(sorted(stratum_counts.items())),
         "selected_by_stratum": dict(sorted(selected_by_stratum.items())),
     }
-    with smart_open(args.manifest_output, "w", encoding="utf-8") as handle:
+    with smart_open(args.manifest_output, "w", encoding="utf-8", transport_params=get_transport_params(args.manifest_output)) as handle:
         json.dump(manifest, handle, ensure_ascii=False, indent=2, sort_keys=True)
         handle.write("\n")
 
