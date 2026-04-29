@@ -160,8 +160,17 @@ help-topic-training:
 
 setup:: topic-training-setup
 
-.PHONY: topic-training-setup topic-training-install-java check-topic-training-mallet
-topic-training-setup: topic-training-install-java check-topic-training-mallet $(NEWSPAPERS_TO_PROCESS_FILE)
+.PHONY: topic-training-setup topic-training-install-java check-topic-training-mallet topic-training-install-spacy-models
+topic-training-setup: topic-training-install-java check-topic-training-mallet topic-training-install-spacy-models $(NEWSPAPERS_TO_PROCESS_FILE)
+
+# Install spaCy language models via direct wheel URLs (PyPI stubs intentionally block plain pip install)
+SPACY_MODEL_BASE_URL ?= https://github.com/explosion/spacy-models/releases/download
+SPACY_VERSION ?= 3.6.0
+topic-training-install-spacy-models:
+	$(PYTHON) -c "import de_core_news_md" 2>/dev/null || \
+		$(PYTHON) -m pip install "$(SPACY_MODEL_BASE_URL)/de_core_news_md-$(SPACY_VERSION)/de_core_news_md-$(SPACY_VERSION)-py3-none-any.whl"
+	$(PYTHON) -c "import fr_core_news_md" 2>/dev/null || \
+		$(PYTHON) -m pip install "$(SPACY_MODEL_BASE_URL)/fr_core_news_md-$(SPACY_VERSION)/fr_core_news_md-$(SPACY_VERSION)-py3-none-any.whl"
 
 ifeq ($(OS),Linux)
 topic-training-install-java:
