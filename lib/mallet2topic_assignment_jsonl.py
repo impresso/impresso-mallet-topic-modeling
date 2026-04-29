@@ -9,21 +9,15 @@ except ImportError:
     import json
 import re
 import collections
-try:
-    from smart_open import open
-except ModuleNotFoundError:
-    import bz2
-    import builtins
 
-    def open(filename, mode="r", encoding=None):
-        if str(filename).startswith("s3://"):
-            raise RuntimeError("smart_open is required for S3 paths")
-        if str(filename).endswith(".bz2"):
-            bz2_mode = mode if "b" in mode else mode + "t"
-            return bz2.open(filename, bz2_mode, encoding=encoding)
-        if "b" in mode:
-            return builtins.open(filename, mode)
-        return builtins.open(filename, mode, encoding=encoding)
+from dotenv import load_dotenv
+from smart_open import open
+
+try:
+    from impresso_cookbook import get_transport_params  # type: ignore
+except ImportError:
+    def get_transport_params(path: str) -> dict:
+        return {}
 
 
 def read_tsv_generator(filename):
@@ -37,7 +31,7 @@ def read_tsv_generator(filename):
         list: A list of values from each non-comment line in the TSV file.
     """
     line_count = 0
-    with open(filename, "r", encoding="utf-8") as file:
+    with open(filename, "r", encoding="utf-8", transport_params=get_transport_params(filename)) as file:
         for line in file:
             line_count += 1
             if not line.startswith("#"):
@@ -211,6 +205,8 @@ def main():
     """
     Main entry point for the script.
     """
+    load_dotenv()  # Load S3 credentials from .env file
+    
     parser = argparse.ArgumentParser(
         usage="%(prog)s [OPTIONS] [ARGS...]",
         description="Calculate topic assignments from topic modeling output.",

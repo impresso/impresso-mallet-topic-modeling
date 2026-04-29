@@ -15,7 +15,10 @@ from pathlib import Path
 from typing import Any, Iterable
 from urllib.parse import urlparse
 
+from dotenv import load_dotenv
 from smart_open import open as smart_open  # type: ignore
+
+from s3_overwrite import add_force_s3_overwrite_argument, assert_can_write_uri
 
 try:
     from impresso_cookbook import (  # type: ignore
@@ -149,6 +152,8 @@ def extract_doc_lemmas(
 
 
 def main() -> int:
+    load_dotenv()  # Load S3 credentials from .env file
+    
     parser = argparse.ArgumentParser(
         description="Create eligible MALLET TSV rows from lingproc JSONL files."
     )
@@ -172,6 +177,7 @@ def main() -> int:
     parser.add_argument("--output", required=True)
     parser.add_argument("--stats-output", required=True)
     parser.add_argument("--run-id", required=True)
+    add_force_s3_overwrite_argument(parser)
     parser.add_argument(
         "--log-file",
         help="Write log to FILE",
@@ -194,6 +200,11 @@ def main() -> int:
         log.error("No input files found")
         return 2
     
+    assert_can_write_uri(args.output, force_s3_overwrite=args.force_s3_overwrite)
+    assert_can_write_uri(
+        args.stats_output, force_s3_overwrite=args.force_s3_overwrite
+    )
+
     log.info(f"Processing {len(inputs)} input file(s)")
 
     vocab = load_vocab(args.vocab)

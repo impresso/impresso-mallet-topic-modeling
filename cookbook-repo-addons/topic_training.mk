@@ -74,6 +74,7 @@ MALLET_SMOKE_INFER_ITERATIONS ?= 100
 MALLET_TOPIC_ASSIGNMENT_THRESHOLD ?= 0.02
 TOPIC_TRAIN_WORD_THRESHOLD ?= 200
 TOPIC_TRAIN_NEGATIVE_DOC_FREQ_MAX ?= 2
+TOPIC_TRAIN_FORCE_S3_OVERWRITE ?= FALSE
 
 topic_train_vocab_s3 = $(S3_TOPIC_TRAIN_BASE_PATH)/vocab/$(1).vocab.tsv.bz2
 topic_train_vocab_meta_s3 = $(S3_TOPIC_TRAIN_BASE_PATH)/vocab/$(1).vocab.metadata.json
@@ -142,6 +143,7 @@ help-topic-training:
 	@echo "  make topic-training-eligible-newspaper LANG=de NEWSPAPER=BL/AATA"
 	@echo "  make topic-training-eligible-LANG"
 	@echo "  make topic-training-eligible-LANG COLLECTION_JOBS=4 MAX_LOAD=8"
+	@echo "  make topic-training-eligible-LANG TOPIC_TRAIN_FORCE_S3_OVERWRITE=TRUE"
 	@echo "  make topic-training-singleton-lemmas-LANG"
 	@echo "  make topic-training-rare-docfreq-negative-lemmas-LANG"
 	@echo "  make topic-training-vocab-LANG TOPIC_TRAIN_ADDITIONAL_EXCLUDE_VOCAB_LANG=s3://..."
@@ -198,7 +200,8 @@ topic-training-vocab-%: FORCE
 		$(call topic_train_exclude_vocab_args,$*) \
 		--output $(call topic_train_vocab_s3,$*) \
 		--metadata-output $(call topic_train_vocab_meta_s3,$*) \
-		--run-id $(TOPIC_TRAIN_RUN_ID)
+		--run-id $(TOPIC_TRAIN_RUN_ID) \
+		--force-s3-overwrite $(TOPIC_TRAIN_FORCE_S3_OVERWRITE)
 
 .PHONY: topic-training-eligible-newspaper
 topic-training-eligible-newspaper:
@@ -217,7 +220,8 @@ topic-training-eligible-newspaper:
 		$(if $(filter true,$(TOPIC_TRAIN_INCLUDE_TITLES)),--include-titles,) \
 		--output $(call topic_train_eligible_s3,$(NEWSPAPER)) \
 		--stats-output $(call topic_train_eligible_stats_s3,$(NEWSPAPER)) \
-		--run-id $(TOPIC_TRAIN_RUN_ID)
+		--run-id $(TOPIC_TRAIN_RUN_ID) \
+		--force-s3-overwrite $(TOPIC_TRAIN_FORCE_S3_OVERWRITE)
 
 topic-training-eligible-%: FORCE
 	$(MAKE) newspaper-list-target \
@@ -238,7 +242,8 @@ topic-training-singleton-lemmas-%: FORCE
 		--max-document-frequency 1 \
 		--output $(call topic_train_singleton_lemmas_s3,$*) \
 		--word-output $(call topic_train_singleton_lemmas_word_s3,$*) \
-		--metadata-output $(call topic_train_singleton_lemmas_meta_s3,$*)
+		--metadata-output $(call topic_train_singleton_lemmas_meta_s3,$*) \
+		--force-s3-overwrite $(TOPIC_TRAIN_FORCE_S3_OVERWRITE)
 	@echo "Review $(call topic_train_singleton_lemmas_word_s3,$*) and manually update $(TOPIC_TRAIN_EXCLUDE_VOCAB_DIR)/$*.txt if the lemmas should be excluded from future vocab builds."
 
 topic-training-rare-docfreq-negative-lemmas-%: FORCE
@@ -248,7 +253,8 @@ topic-training-rare-docfreq-negative-lemmas-%: FORCE
 		--max-document-frequency $(TOPIC_TRAIN_NEGATIVE_DOC_FREQ_MAX) \
 		--output $(call topic_train_rare_docfreq_negative_lemmas_s3,$*) \
 		--word-output $(call topic_train_rare_docfreq_negative_lemmas_word_s3,$*) \
-		--metadata-output $(call topic_train_rare_docfreq_negative_lemmas_meta_s3,$*)
+		--metadata-output $(call topic_train_rare_docfreq_negative_lemmas_meta_s3,$*) \
+		--force-s3-overwrite $(TOPIC_TRAIN_FORCE_S3_OVERWRITE)
 	@echo "Review $(call topic_train_rare_docfreq_negative_lemmas_word_s3,$*) and manually update $(TOPIC_TRAIN_EXCLUDE_VOCAB_DIR)/$*.txt if the lemmas should be excluded from future vocab builds."
 
 topic-training-sample-%: FORCE
@@ -263,16 +269,17 @@ topic-training-sample-%: FORCE
 		--output $(call topic_train_sample_s3,$*) \
 		--manifest-output $(call topic_train_sample_manifest_s3,$*) \
 		--run-id $(TOPIC_TRAIN_RUN_ID) \
-		--language $*
+		--language $* \
+		--force-s3-overwrite $(TOPIC_TRAIN_FORCE_S3_OVERWRITE)
 
 topic-training-import-%: FORCE
 	@mkdir -p $(LOCAL_TOPIC_TRAIN_BASE_PATH)/sample $(LOCAL_TOPIC_TRAIN_BASE_PATH)/mallet
-	$(PYTHON) lib/copy_uri.py $(call topic_train_sample_s3,$*) $(call topic_train_sample_local,$*)
+	$(PYTHON) lib/copy_uri.py --force-s3-overwrite $(TOPIC_TRAIN_FORCE_S3_OVERWRITE) $(call topic_train_sample_s3,$*) $(call topic_train_sample_local,$*)
 	MEMORY=$(MALLET_STD_MEMORY) $(MALLET) import-file \
 		--input $(call topic_train_sample_local,$*) \
 		--output $(call topic_train_sample_mallet_local,$*) \
 		--keep-sequence
-	$(PYTHON) lib/copy_uri.py $(call topic_train_sample_mallet_local,$*) $(call topic_train_sample_mallet_s3,$*)
+	$(PYTHON) lib/copy_uri.py --force-s3-overwrite $(TOPIC_TRAIN_FORCE_S3_OVERWRITE) $(call topic_train_sample_mallet_local,$*) $(call topic_train_sample_mallet_s3,$*)
 
 topic-training-train-%: FORCE
 	$(MAKE) topic-training-import-$*
@@ -290,7 +297,7 @@ topic-training-train-%: FORCE
 		--num-threads $(MALLET_THREADS) \
 		--random-seed $(MALLET_RANDOM_SEED)
 	$(PYTHON) -c 'import json, datetime; data={"run_id":"$(TOPIC_TRAIN_RUN_ID)","language":"$*","created_at":datetime.datetime.now(datetime.timezone.utc).isoformat(),"mallet":{"num_topics":$(MALLET_NUM_TOPICS),"train_iterations":$(MALLET_TRAIN_ITERATIONS),"optimize_interval":$(MALLET_OPTIMIZE_INTERVAL),"threads":$(MALLET_THREADS),"random_seed":$(MALLET_RANDOM_SEED)},"vocab":"$(call topic_train_vocab_s3,$*)","sample":"$(call topic_train_sample_s3,$*)"}; open("$(call topic_train_metadata_local,$*)","w").write(json.dumps(data, indent=2, sort_keys=True)+"\n")'
-	$(PYTHON) lib/copy_uri.py \
+	$(PYTHON) lib/copy_uri.py --force-s3-overwrite $(TOPIC_TRAIN_FORCE_S3_OVERWRITE) \
 		$(call topic_train_model_local,$*) $(call topic_train_model_s3,$*) \
 		$(call topic_train_inferencer_local,$*) $(call topic_train_inferencer_s3,$*) \
 		$(call topic_train_topickeys_local,$*) $(call topic_train_topickeys_s3,$*) \
@@ -307,7 +314,7 @@ topic-training-describe-%: FORCE
 		-W $(TOPIC_TRAIN_WORD_THRESHOLD) \
 		-o $(call topic_train_description_local,$*) \
 		$(call topic_train_topicwordweights_local,$*)
-	$(PYTHON) lib/copy_uri.py $(call topic_train_description_local,$*) $(call topic_train_description_s3,$*)
+	$(PYTHON) lib/copy_uri.py --force-s3-overwrite $(TOPIC_TRAIN_FORCE_S3_OVERWRITE) $(call topic_train_description_local,$*) $(call topic_train_description_s3,$*)
 
 topic-training-smoke-infer-%: FORCE
 	@mkdir -p $(LOCAL_TOPIC_TRAIN_BASE_PATH)/smoke
@@ -323,17 +330,17 @@ topic-training-smoke-infer-%: FORCE
 		--num-iterations $(MALLET_SMOKE_INFER_ITERATIONS) \
 		--output-doc-topics $(call topic_train_smoke_doctopics_local,$*) \
 		--random-seed $(MALLET_RANDOM_SEED)
-	$(PYTHON) lib/copy_uri.py $(call topic_train_smoke_doctopics_local,$*) $(call topic_train_smoke_doctopics_s3,$*)
+	$(PYTHON) lib/copy_uri.py --force-s3-overwrite $(TOPIC_TRAIN_FORCE_S3_OVERWRITE) $(call topic_train_smoke_doctopics_local,$*) $(call topic_train_smoke_doctopics_s3,$*)
 	$(PYTHON) lib/mallet2topic_assignment_jsonl.py \
 		-L $* \
 		-M tm-$*-$(TOPIC_TRAIN_RUN_ID) \
 		-T $(MALLET_TOPIC_ASSIGNMENT_THRESHOLD) \
 		$(call topic_train_smoke_doctopics_local,$*) > $(call topic_train_smoke_assignment_plain_local,$*)
 	bzip2 -f $(call topic_train_smoke_assignment_plain_local,$*)
-	$(PYTHON) lib/copy_uri.py $(call topic_train_smoke_assignment_local,$*) $(call topic_train_smoke_assignment_s3,$*)
+	$(PYTHON) lib/copy_uri.py --force-s3-overwrite $(TOPIC_TRAIN_FORCE_S3_OVERWRITE) $(call topic_train_smoke_assignment_local,$*) $(call topic_train_smoke_assignment_s3,$*)
 
 topic-training-publish-%: FORCE
-	$(PYTHON) lib/copy_uri.py \
+	$(PYTHON) lib/copy_uri.py --force-s3-overwrite $(TOPIC_TRAIN_FORCE_S3_OVERWRITE) \
 		$(call topic_train_vocab_s3,$*) $(call topic_train_final_vocab_s3,$*) \
 		$(call topic_train_vocab_meta_s3,$*) $(call topic_train_final_vocab_meta_s3,$*) \
 		$(call topic_train_sample_manifest_s3,$*) $(call topic_train_final_sample_manifest_s3,$*) \

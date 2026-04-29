@@ -10,18 +10,14 @@ import math
 from operator import itemgetter
 from typing import Iterable
 
-try:
-    from smart_open import open as smart_open  # type: ignore
-except ModuleNotFoundError:
-    import bz2
-    import builtins
+from dotenv import load_dotenv
+from smart_open import open as smart_open  # type: ignore
 
-    def smart_open(path: str, mode: str = "r", encoding: str | None = None):
-        if path.startswith("s3://"):
-            raise RuntimeError("smart_open is required for S3 paths")
-        if path.endswith(".bz2"):
-            return bz2.open(path, mode) if "b" in mode else bz2.open(path, mode + "t" if "t" not in mode else mode, encoding=encoding)
-        return builtins.open(path, mode) if "b" in mode else builtins.open(path, mode, encoding=encoding)
+try:
+    from impresso_cookbook import get_transport_params  # type: ignore
+except ImportError:
+    def get_transport_params(path: str) -> dict:
+        return {}
 
 
 def format_topic_id(topic: int, topic_model: str, lang: str, topic_count: int) -> str:
@@ -33,7 +29,7 @@ def iter_topic_records(path: str, min_score: float) -> Iterable[list[list[object
     current_topic: int | None = None
     records: list[list[object]] = []
 
-    with smart_open(path, "r", encoding="utf-8") as handle:
+    with smart_open(path, "r", encoding="utf-8", transport_params=get_transport_params(path)) as handle:
         for line in handle:
             fields = line.rstrip("\n").split("\t")
             if len(fields) != 3:
@@ -83,9 +79,11 @@ def main() -> int:
     parser.add_argument("-o", "--output", help="Output JSONL path, default stdout")
     args = parser.parse_args()
 
+    load_dotenv()  # Load S3 credentials from .env file
+
     round_digits = math.ceil(abs(math.log10(args.min_probability))) + 1
     out = (
-        smart_open(args.output, "w", encoding="utf-8")
+        smart_open(args.output, "w", encoding="utf-8", transport_params=get_transport_params(args.output))
         if args.output
         else None
     )

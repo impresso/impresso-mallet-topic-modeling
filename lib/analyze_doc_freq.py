@@ -10,7 +10,18 @@ from pathlib import Path
 from typing import Iterable
 from urllib.parse import urlparse
 
+from dotenv import load_dotenv
 from smart_open import open as smart_open  # type: ignore
+
+from s3_overwrite import add_force_s3_overwrite_argument, assert_can_write_uri
+
+try:
+    from impresso_cookbook import get_s3_client  # type: ignore
+except ImportError:
+    # Fallback for environments without impresso_cookbook
+    def get_s3_client():
+        import boto3
+        return boto3.client("s3")
 
 
 def smart_open_text(path: str, *, raw: bool = False):
@@ -23,12 +34,14 @@ def smart_open_text(path: str, *, raw: bool = False):
 
 
 def list_s3(prefix: str, suffix: str) -> list[str]:
-    import boto3  # type: ignore
-
+    """List S3 objects with the given prefix and suffix.
+    
+    Uses impresso_cookbook get_s3_client() which loads credentials from .env file.
+    """
     parsed = urlparse(prefix)
     bucket = parsed.netloc
     key_prefix = parsed.path.lstrip("/")
-    client = boto3.client("s3")
+    client = get_s3_client()
     paginator = client.get_paginator("list_objects_v2")
     paths: list[str] = []
     for page in paginator.paginate(Bucket=bucket, Prefix=key_prefix):
@@ -121,6 +134,8 @@ def write_words(path: str, rows: Iterable[tuple[str, int, int, str]]) -> None:
 
 
 def main() -> int:
+    load_dotenv()  # Load S3 credentials from .env file
+    
     parser = argparse.ArgumentParser(
         description=(
             "Report lemmas with low document frequency across eligible MALLET "
@@ -161,6 +176,7 @@ def main() -> int:
         help="Report lemmas appearing in at most this many documents.",
     )
     parser.add_argument("--no-header", action="store_true")
+    add_force_s3_overwrite_argument(parser)
     args = parser.parse_args()
     if args.max_document_frequency < 1:
         parser.error("--max-document-frequency must be >= 1")
@@ -169,6 +185,12 @@ def main() -> int:
     if not inputs:
         print("no eligible files found", file=sys.stderr)
         return 2
+
+    assert_can_write_uri(args.output, force_s3_overwrite=args.force_s3_overwrite)
+    assert_can_write_uri(args.word_output, force_s3_overwrite=args.force_s3_overwrite)
+    assert_can_write_uri(
+        args.metadata_output, force_s3_overwrite=args.force_s3_overwrite
+    )
 
     doc_freq: Counter[str] = Counter()
     total_freq: Counter[str] = Counter()

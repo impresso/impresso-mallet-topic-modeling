@@ -16,6 +16,17 @@ from pathlib import Path
 from typing import Iterable
 from urllib.parse import urlparse
 
+from dotenv import load_dotenv
+
+from s3_overwrite import add_force_s3_overwrite_argument, assert_can_write_uri
+
+try:
+    from impresso_cookbook import get_s3_client  # type: ignore
+except ImportError:
+    def get_s3_client():
+        import boto3
+        return boto3.client("s3")
+
 try:
     from smart_open import open as smart_open  # type: ignore
 except ModuleNotFoundError:
@@ -34,12 +45,14 @@ CI_ID_RE = re.compile(r"^(?P<newspaper>.+?)-(?P<year>\d{4})-\d{2}-\d{2}-")
 
 
 def list_s3(prefix: str, suffix: str) -> list[str]:
-    import boto3  # type: ignore
-
+    """List S3 objects with the given prefix and suffix.
+    
+    Uses impresso_cookbook get_s3_client() which loads credentials from .env file.
+    """
     parsed = urlparse(prefix)
     bucket = parsed.netloc
     key_prefix = parsed.path.lstrip("/")
-    client = boto3.client("s3")
+    client = get_s3_client()
     paginator = client.get_paginator("list_objects_v2")
     paths: list[str] = []
     for page in paginator.paginate(Bucket=bucket, Prefix=key_prefix):
@@ -105,6 +118,8 @@ def iter_rows(paths: Iterable[str]) -> Iterable[tuple[str, str]]:
 
 
 def main() -> int:
+    load_dotenv()  # Load S3 credentials from .env file
+    
     parser = argparse.ArgumentParser(
         description="Sample eligible MALLET TSV rows with deterministic stratification."
     )
@@ -120,12 +135,18 @@ def main() -> int:
     parser.add_argument("--manifest-output", required=True)
     parser.add_argument("--run-id", required=True)
     parser.add_argument("--language", required=True)
+    add_force_s3_overwrite_argument(parser)
     args = parser.parse_args()
 
     inputs = expand_inputs(args.input, args.s3_prefix, args.input_suffix)
     if not inputs:
         print("no input files found", file=sys.stderr)
         return 2
+
+    assert_can_write_uri(args.output, force_s3_overwrite=args.force_s3_overwrite)
+    assert_can_write_uri(
+        args.manifest_output, force_s3_overwrite=args.force_s3_overwrite
+    )
 
     stratum_fields = {field.strip() for field in args.strata.split(",") if field.strip()}
     heaps: dict[str, list[tuple[int, str]]] = defaultdict(list)

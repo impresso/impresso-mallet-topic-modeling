@@ -13,18 +13,16 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Iterable
 
-try:
-    from smart_open import open as smart_open  # type: ignore
-except ModuleNotFoundError:
-    import bz2
-    import builtins
+from dotenv import load_dotenv
+from smart_open import open as smart_open  # type: ignore
 
-    def smart_open(path: str, mode: str = "r", encoding: str | None = None):
-        if path.startswith("s3://"):
-            raise RuntimeError("smart_open is required for S3 paths")
-        if path.endswith(".bz2"):
-            return bz2.open(path, mode) if "b" in mode else bz2.open(path, mode + "t" if "t" not in mode else mode, encoding=encoding)
-        return builtins.open(path, mode) if "b" in mode else builtins.open(path, mode, encoding=encoding)
+from s3_overwrite import add_force_s3_overwrite_argument, assert_can_write_uri
+
+try:
+    from impresso_cookbook import get_transport_params  # type: ignore
+except ImportError:
+    def get_transport_params(path: str) -> dict:
+        return {}
 
 
 def read_word_file(path: str | None, lower: bool = True) -> set[str]:
@@ -34,7 +32,7 @@ def read_word_file(path: str | None, lower: bool = True) -> set[str]:
         return set()
 
     words: set[str] = set()
-    with smart_open(path, "r", encoding="utf-8") as handle:
+    with smart_open(path, "r", encoding="utf-8", transport_params=get_transport_params(path)) as handle:
         for line in handle:
             word = line.strip().split("\t", 1)[0]
             if word:
@@ -49,7 +47,7 @@ def sha256_path(path: str | None) -> str | None:
         return None
 
     digest = hashlib.sha256()
-    with smart_open(path, "rb") as handle:
+    with smart_open(path, "rb", transport_params=get_transport_params(path)) as handle:
         for chunk in iter(lambda: handle.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
@@ -81,12 +79,14 @@ def iter_vocab(
 
 
 def write_vocab(path: str, rows: list[tuple[str, int]]) -> None:
-    with smart_open(path, "w", encoding="utf-8") as handle:
+    with smart_open(path, "w", encoding="utf-8", transport_params=get_transport_params(path)) as handle:
         for lemma, count in rows:
             handle.write(f"{lemma}\t{count}\n")
 
 
 def main() -> int:
+    load_dotenv()  # Load S3 credentials from .env file
+    
     parser = argparse.ArgumentParser(
         description="Trim an aggregated lemmafreq JSON file into a topic vocabulary."
     )
@@ -111,7 +111,13 @@ def main() -> int:
     parser.add_argument("--output", required=True, help="Output vocab TSV")
     parser.add_argument("--metadata-output", required=True, help="Output metadata JSON")
     parser.add_argument("--run-id", required=True)
+    add_force_s3_overwrite_argument(parser)
     args = parser.parse_args()
+
+    assert_can_write_uri(args.output, force_s3_overwrite=args.force_s3_overwrite)
+    assert_can_write_uri(
+        args.metadata_output, force_s3_overwrite=args.force_s3_overwrite
+    )
 
     negative_words: set[str] = set()
     for negative_list in args.negative_list:
@@ -121,7 +127,7 @@ def main() -> int:
     for exclude_vocab in args.exclude_vocab:
         exclude_words.update(read_word_file(exclude_vocab))
 
-    with smart_open(args.lemmafreq, "r", encoding="utf-8") as handle:
+    with smart_open(args.lemmafreq, "r", encoding="utf-8", transport_params=get_transport_params(args.lemmafreq)) as handle:
         data = json.load(handle)
 
     freqs = data.get("freqs")
@@ -174,7 +180,7 @@ def main() -> int:
         },
     }
 
-    with smart_open(args.metadata_output, "w", encoding="utf-8") as handle:
+    with smart_open(args.metadata_output, "w", encoding="utf-8", transport_params=get_transport_params(args.metadata_output)) as handle:
         json.dump(metadata, handle, ensure_ascii=False, indent=2, sort_keys=True)
         handle.write("\n")
 
