@@ -5,24 +5,8 @@ from __future__ import annotations
 import argparse
 from urllib.parse import urlparse
 
-try:
-    from dotenv import load_dotenv
-except ModuleNotFoundError:
-    def load_dotenv() -> None:
-        return None
-
-try:
-    from impresso_cookbook import get_s3_client  # type: ignore
-except ImportError:
-    def get_s3_client():
-        import boto3
-        import os
-        return boto3.client(
-            "s3",
-            aws_access_key_id=os.environ.get("SE_ACCESS_KEY"),
-            aws_secret_access_key=os.environ.get("SE_SECRET_KEY"),
-            endpoint_url=os.environ.get("SE_HOST_URL")
-        )
+from dotenv import load_dotenv
+from impresso_cookbook import get_s3_client  # type: ignore
 
 load_dotenv()  # Load credentials at module level
 

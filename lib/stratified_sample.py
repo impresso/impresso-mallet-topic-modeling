@@ -19,47 +19,11 @@ from urllib.parse import urlparse
 from dotenv import load_dotenv
 
 from s3_overwrite import add_force_s3_overwrite_argument, assert_can_write_uri
+from impresso_cookbook import get_s3_client, get_transport_params  # type: ignore
+from smart_open import open as smart_open  # type: ignore
 
 # Load S3 credentials from .env file at module level
 load_dotenv()
-
-try:
-    from impresso_cookbook import get_s3_client, get_transport_params  # type: ignore
-except ImportError:
-    def get_s3_client():
-        import boto3
-        import os
-        return boto3.client(
-            "s3",
-            aws_access_key_id=os.environ.get("SE_ACCESS_KEY"),
-            aws_secret_access_key=os.environ.get("SE_SECRET_KEY"),
-            endpoint_url=os.environ.get("SE_HOST_URL")
-        )
-    
-    def get_transport_params(path: str) -> dict:
-        import os
-        if not path.startswith("s3://"):
-            return {}
-        return {
-            "client_kwargs": {
-                "aws_access_key_id": os.environ.get("SE_ACCESS_KEY"),
-                "aws_secret_access_key": os.environ.get("SE_SECRET_KEY"),
-                "endpoint_url": os.environ.get("SE_HOST_URL")
-            }
-        }
-
-try:
-    from smart_open import open as smart_open  # type: ignore
-except ModuleNotFoundError:
-    import bz2
-    import builtins
-
-    def smart_open(path: str, mode: str = "r", encoding: str | None = None):
-        if path.startswith("s3://"):
-            raise RuntimeError("smart_open is required for S3 paths")
-        if path.endswith(".bz2"):
-            return bz2.open(path, mode) if "b" in mode else bz2.open(path, mode + "t" if "t" not in mode else mode, encoding=encoding)
-        return builtins.open(path, mode) if "b" in mode else builtins.open(path, mode, encoding=encoding)
 
 
 CI_ID_RE = re.compile(r"^(?P<newspaper>.+?)-(?P<year>\d{4})-\d{2}-\d{2}-")

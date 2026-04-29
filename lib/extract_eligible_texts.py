@@ -19,53 +19,15 @@ from dotenv import load_dotenv
 from smart_open import open as smart_open  # type: ignore
 
 from s3_overwrite import add_force_s3_overwrite_argument, assert_can_write_uri
+from impresso_cookbook import (  # type: ignore
+    get_s3_client,
+    get_timestamp,
+    setup_logging,
+    get_transport_params,
+)
 
 # Load S3 credentials from .env file at module level
 load_dotenv()
-
-try:
-    from impresso_cookbook import (  # type: ignore
-        get_s3_client,
-        get_timestamp,
-        setup_logging,
-        get_transport_params,
-    )
-except ImportError:
-    # Fallback for when impresso_cookbook is not available
-    def setup_logging(level: str, log_file: str | None = None, logger=None) -> None:
-        logging.basicConfig(
-            level=getattr(logging, level),
-            format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-            handlers=[
-                logging.StreamHandler(sys.stderr),
-                *([] if log_file is None else [logging.FileHandler(log_file)])
-            ]
-        )
-    
-    def get_transport_params(path: str) -> dict:
-        import os
-        if not path.startswith("s3://"):
-            return {}
-        return {
-            "client_kwargs": {
-                "aws_access_key_id": os.environ.get("SE_ACCESS_KEY"),
-                "aws_secret_access_key": os.environ.get("SE_SECRET_KEY"),
-                "endpoint_url": os.environ.get("SE_HOST_URL")
-            }
-        }
-    
-    def get_s3_client():
-        import boto3
-        import os
-        return boto3.client(
-            's3',
-            aws_access_key_id=os.environ.get('SE_ACCESS_KEY'),
-            aws_secret_access_key=os.environ.get('SE_SECRET_KEY'),
-            endpoint_url=os.environ.get('SE_HOST_URL')
-        )
-    
-    def get_timestamp() -> str:
-        return datetime.now(timezone.utc).isoformat()
 
 log = logging.getLogger(__name__)
 

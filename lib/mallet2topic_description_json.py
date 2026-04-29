@@ -12,24 +12,10 @@ from typing import Iterable
 
 from dotenv import load_dotenv
 from smart_open import open as smart_open  # type: ignore
+from impresso_cookbook import get_transport_params  # type: ignore
 
 # Load S3 credentials from .env file at module level
 load_dotenv()
-
-try:
-    from impresso_cookbook import get_transport_params  # type: ignore
-except ImportError:
-    def get_transport_params(path: str) -> dict:
-        import os
-        if not path.startswith("s3://"):
-            return {}
-        return {
-            "client_kwargs": {
-                "aws_access_key_id": os.environ.get("SE_ACCESS_KEY"),
-                "aws_secret_access_key": os.environ.get("SE_SECRET_KEY"),
-                "endpoint_url": os.environ.get("SE_HOST_URL")
-            }
-        }
 
 
 def format_topic_id(topic: int, topic_model: str, lang: str, topic_count: int) -> str:
