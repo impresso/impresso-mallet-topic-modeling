@@ -7,8 +7,12 @@ ifdef CFG
 endif
 -include $(CONFIG_LOCAL_MAKE)
 
-BUILD_DIR ?= build
+BUILD_DIR ?= build.d
 LOGGING_LEVEL ?= INFO
+
+$(BUILD_DIR):
+	mkdir -p $@
+
 
 ifndef log.debug
 define log.debug
@@ -28,7 +32,7 @@ help:
 	@echo "Usage: make <target>"
 	@echo ""
 	@echo "Topic training:"
-	@echo "  make topic-training-help"
+	@echo "  make help-topic-training"
 	@echo "  make topic-training-vocab-de"
 	@echo "  make topic-training-eligible-newspaper LANG=de NEWSPAPER=BL/AATA"
 	@echo "  make topic-training-sample-de"
@@ -36,4 +40,5 @@ help:
 	@echo ""
 	@echo "Use remake instead of make when running locally on macOS."
 
+include cookbook/newspaper_list.mk
 include cookbook-repo-addons/topic_training.mk

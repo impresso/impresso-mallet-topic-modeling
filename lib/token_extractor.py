@@ -65,6 +65,7 @@ import logging
 import sys
 from typing import Generator, Set, Optional, List
 from smart_open import open as smart_open  # type: ignore
+from dotenv import load_dotenv
 
 from impresso_cookbook import (  # type: ignore
     get_s3_client,
@@ -74,6 +75,7 @@ from impresso_cookbook import (  # type: ignore
 )
 
 log = logging.getLogger(__name__)
+load_dotenv()
 
 
 def parse_arguments(args: Optional[List[str]] = None) -> argparse.Namespace:
@@ -126,6 +128,12 @@ def parse_arguments(args: Optional[List[str]] = None) -> argparse.Namespace:
             "If not specified, all languages are included."
         ),
     )
+    parser.add_argument(
+        "--min-length",
+        type=int,
+        default=3,
+        help="Minimum lemma length in characters (default: %(default)s)",
+    )
     return parser.parse_args(args)
 
 
@@ -144,6 +152,7 @@ class TokenExtractor:
         output_file: Optional[str],
         pos_tags: Set[str],
         languages: Optional[Set[str]] = None,
+        min_length: int = 3,
         log_level: str = "INFO",
         log_file: Optional[str] = None,
     ) -> None:
@@ -155,6 +164,7 @@ class TokenExtractor:
             output_file (Optional[str]): Path to output TSV file (None for stdout)
             pos_tags (Set[str]): Set of POS tags to extract (e.g., {'NOUN', 'VERB'})
             languages (Optional[Set[str]]): Set of languages to filter (None for all)
+            min_length (int): Minimum lemma length in characters (default: 3)
             log_level (str): Logging level (default: "INFO")
             log_file (Optional[str]): Path to log file (default: None)
         """
@@ -162,6 +172,7 @@ class TokenExtractor:
         self.output_file = output_file
         self.pos_tags = pos_tags
         self.languages = languages
+        self.min_length = min_length
         self.log_level = log_level
         self.log_file = log_file
 
@@ -269,9 +280,13 @@ class TokenExtractor:
                             current_tokens = []
 
                         # Extract tokens matching POS tags
-                        for token in sent.get("tok", []):
+                        for token in sent.get("tok", sent.get("tokens", [])):
                             if token.get("p") in self.pos_tags:
-                                current_tokens.append(token["t"])
+                                lemma = (
+                                    token["l"] if "l" in token else token["t"]
+                                ).lower()
+                                if len(lemma) >= self.min_length:
+                                    current_tokens.append(lemma)
 
                 except (json.JSONDecodeError, KeyError) as e:
                     log.warning(f"Skipping line {line_num}: {e}")
@@ -289,6 +304,9 @@ def main(args: Optional[List[str]] = None) -> None:
     Args:
         args: Command-line arguments (uses sys.argv if None)
     """
+    # Load environment variables from .env file
+    load_dotenv()
+
     options: argparse.Namespace = parse_arguments(args)
 
     processor: TokenExtractor = TokenExtractor(
@@ -296,6 +314,7 @@ def main(args: Optional[List[str]] = None) -> None:
         output_file=options.output,
         pos_tags=set(options.pos_tags),
         languages=set(options.languages) if options.languages else None,
+        min_length=options.min_length,
         log_level=options.log_level,
         log_file=options.log_file,
     )

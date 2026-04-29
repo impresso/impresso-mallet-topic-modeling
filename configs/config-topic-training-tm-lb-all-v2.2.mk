@@ -1,28 +1,27 @@
-# English MALLET topic-training configuration.
+# Luxembourgish MALLET topic-training configuration.
 #
-# This config mirrors the existing inference model specification pattern:
-#   tm-de-all-v2.0.config.json
-#   tm-fr-all-v2.0.config.json
+# This config mirrors the existing inference model specification:
+#   tm-lb-all-v2.1.config.json
 #
-# Inferred English model specification:
+# Luxembourgish model specification for v2.2:
 #   {
-#     "uposFilter": ["NOUN", "PROPN"],
+#     "uposFilter": ["NOUN"],
 #     "topic_count": 100,
-#     "language": "en",
-#     "model_id": "tm-en-all-v2.2",
-#     "lowercase_token": false,
+#     "language": "lb",
+#     "model_id": "tm-lb-all-v2.2",
+#     "lowercase_token": true,
 #     "min_lemmas": 8
 #   }
 #
 # Usage:
-#   remake topic-training-all-en CFG=configs/config-topic-training-tm-en-all-v2.2.mk
+#   remake topic-training-all-lb CFG=configs/config-topic-training-tm-lb-all-v2.2.mk
 
 LOGGING_LEVEL ?= INFO
 SHELL ?= /bin/bash
 
 # Input linguistic-processing and lemma-frequency run.
 S3_BUCKET_LINGPROC_COMPONENT ?= 130-component-sandbox
-RUN_ID_LINGPROC ?= lingproc-spacy_v3.6.0-multilingual_v1-0-3
+RUN_ID_LINGPROC ?= lingproc-pos-spacy_v3.6.0-multilingual_v1-0-3
 TOPIC_TRAIN_LEMMAFREQ_SELECTION_LABEL ?= upos-PROPN_NOUN.minlength-2
 
 # Source lingproc content-item files used for eligible text extraction.
@@ -35,31 +34,32 @@ PATH_LINGPROC_BASE ?= $(S3_BUCKET_LINGPROC)/$(PROCESS_LABEL_LINGPROC)$(PROCESS_S
 S3_PREFIX_NEWSPAPERS_TO_PROCESS_BUCKET ?= $(S3_BUCKET_LINGPROC)
 NEWSPAPER_PREFIX ?= $(PROCESS_LABEL_LINGPROC)$(PROCESS_SUBTYPE_LABEL_LINGPROC)/$(RUN_ID_LINGPROC)/
 NEWSPAPER_HAS_PROVIDER ?= 1
+NEWSPAPER_FNMATCH_lb ?= BNL/*
 
 # Topic training output.
 TOPIC_TRAIN_BUCKET ?= 130-component-sandbox
 TOPIC_TRAIN_FINAL_BUCKET ?= 132-component-final
 TOPIC_TRAIN_PREFIX ?= topics-mallet
-TOPIC_TRAIN_RUN_ID ?= tm-en-all-v2.2
-TOPIC_TRAIN_LANGS ?= en
+TOPIC_TRAIN_RUN_ID ?= tm-lb-all-v2.2
+TOPIC_TRAIN_LANGS ?= lb
 
-# English model specification.
-TOPIC_TRAIN_MODEL_ID ?= tm-en-all-v2.2
-TOPIC_TRAIN_POS_TAGS ?= NOUN,PROPN
-TOPIC_TRAIN_MIN_LEMMA_LENGTH ?= 2
+# Luxembourgish model specification.
+TOPIC_TRAIN_MODEL_ID ?= tm-lb-all-v2.2
+TOPIC_TRAIN_POS_TAGS := NOUN,PROPN
+TOPIC_TRAIN_MIN_LEMMA_LENGTH ?= 3
 TOPIC_TRAIN_MIN_VOCAB_TOKENS ?= 8
 TOPIC_TRAIN_MIN_UNIQUE_LEMMAS ?= 1
-TOPIC_TRAIN_LOWERCASE_TOKEN ?= false
+TOPIC_TRAIN_LOWERCASE_TOKEN ?= true
 
-# Vocabulary trimming. Adjust these after inspecting English lemmafreq coverage.
+# Vocabulary trimming. Adjust these after inspecting Luxembourgish lemmafreq coverage.
 TOPIC_TRAIN_VOCAB_MIN_FREQ ?= 9
-TOPIC_TRAIN_VOCAB_MAX_FREQ ?= 5000
+TOPIC_TRAIN_VOCAB_MAX_FREQ ?= 50000
 TOPIC_TRAIN_NEGATIVE_LIST_DIR ?= resources/negativelemmas
 TOPIC_TRAIN_INCLUDE_VOCAB_DIR ?= resources/include-vocab
 TOPIC_TRAIN_EXCLUDE_VOCAB_DIR ?= resources/exclude-vocab
 
 # Eligible-text and sampling defaults.
-TOPIC_TRAIN_MAX_TOKENS ?= 1500
+TOPIC_TRAIN_MAX_TOKENS ?= 1000
 TOPIC_TRAIN_INCLUDE_TITLES ?= true
 TOPIC_TRAIN_SAMPLE_SIZE ?= 1000000
 TOPIC_TRAIN_SAMPLE_SEED ?= 42

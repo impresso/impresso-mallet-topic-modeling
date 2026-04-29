@@ -9,6 +9,9 @@
 $(call log.debug, COOKBOOK BEGIN INCLUDE: cookbook-repo-addons/topic_training.mk)
 
 PYTHON ?= python3
+OS ?= $(shell uname -s)
+JAVA_PACKAGE_APT ?= openjdk-17-jre-headless
+JAVA_PACKAGE_BREW ?= openjdk@17
 
 TOPIC_TRAIN_BUCKET ?= 130-component-sandbox
 TOPIC_TRAIN_FINAL_BUCKET ?= 132-component-final
@@ -19,7 +22,6 @@ TOPIC_TRAIN_LANGS ?= de fr en lb
 S3_BUCKET_LINGPROC_COMPONENT ?= UNCONFIGURED-LINGPROC-COMPONENT-BUCKET
 RUN_ID_LINGPROC ?= UNCONFIGURED-LINGPROC-RUN-ID
 PATH_LINGPROC_BASE ?= UNCONFIGURED-LINGPROC-BASE-PATH
-NEWSPAPERS_TO_PROCESS_FILE ?= /dev/null
 
 S3_TOPIC_TRAIN_BASE_PATH := s3://$(TOPIC_TRAIN_BUCKET)/$(TOPIC_TRAIN_PREFIX)/$(TOPIC_TRAIN_RUN_ID)
 LOCAL_TOPIC_TRAIN_BASE_PATH := $(BUILD_DIR)/$(TOPIC_TRAIN_BUCKET)/$(TOPIC_TRAIN_PREFIX)/$(TOPIC_TRAIN_RUN_ID)
@@ -32,6 +34,9 @@ topic_train_lemmafreq_s3 = $(S3_TOPIC_TRAIN_LEMMAFREQ_BASE)/$(1)/ALL.$(TOPIC_TRA
 
 TOPIC_TRAIN_LINGPROC_S3_PREFIX ?= s3://$(PATH_LINGPROC_BASE)
 TOPIC_TRAIN_INPUT_SUFFIX ?= .jsonl.bz2
+topic_train_newspaper_fnmatch = $(or $(value NEWSPAPER_FNMATCH_$(1)),$(NEWSPAPER_FNMATCH))
+topic_train_newspapers_to_process_file = $(BUILD_DIR)/topic-training-eligible-$(1).newspapers.txt
+topic_train_newspapers_to_process_log_file = $(call topic_train_newspapers_to_process_file,$(1)).log.gz
 
 TOPIC_TRAIN_POS_TAGS ?= PROPN,NOUN
 TOPIC_TRAIN_MIN_LEMMA_LENGTH ?= 3
@@ -116,9 +121,10 @@ topic_train_final_metadata_s3 = $(S3_TOPIC_TRAIN_FINAL_BASE_PATH)/metadata/$(1).
 .PHONY: FORCE
 FORCE:
 
-.PHONY: topic-training-help
-topic-training-help:
+.PHONY: help-topic-training
+help-topic-training:
 	@echo "Topic training targets:"
+	@echo "  topic-training-setup"
 	@echo "  topic-training-vocab-LANG"
 	@echo "  topic-training-eligible-newspaper LANG=de NEWSPAPER=BL/AATA"
 	@echo "  topic-training-eligible-LANG"
@@ -129,8 +135,38 @@ topic-training-help:
 	@echo "  topic-training-smoke-infer-LANG"
 	@echo "  topic-training-publish-LANG"
 	@echo "  topic-training-all-LANG"
+	@echo "  check-topic-training-mallet"
 	@echo "S3 base: $(S3_TOPIC_TRAIN_BASE_PATH)"
 	@echo "Final base: $(S3_TOPIC_TRAIN_FINAL_BASE_PATH)"
+
+setup:: topic-training-setup
+
+.PHONY: topic-training-setup topic-training-install-java check-topic-training-mallet
+topic-training-setup: topic-training-install-java check-topic-training-mallet $(NEWSPAPERS_TO_PROCESS_FILE)
+
+ifeq ($(OS),Linux)
+topic-training-install-java:
+	which java >/dev/null || sudo apt-get install -y $(JAVA_PACKAGE_APT)
+
+else ifeq ($(OS),Darwin)
+topic-training-install-java:
+	which java >/dev/null || brew install $(JAVA_PACKAGE_BREW)
+	if brew --prefix $(JAVA_PACKAGE_BREW) >/dev/null 2>&1; then \
+		echo "JAVA_HOME=$$(brew --prefix $(JAVA_PACKAGE_BREW))" > .env_java; \
+		echo 'PATH=$$JAVA_HOME/bin:$$PATH' >> .env_java; \
+	fi
+
+else
+topic-training-install-java:
+	which java >/dev/null
+endif
+
+check-topic-training-mallet:
+	@test -x "$(MALLET)" || { echo "MALLET executable not found or not executable: $(MALLET)"; exit 1; }
+	@java -version >/dev/null
+	@$(MALLET) train-topics --help >/dev/null 2>&1; status=$$?; \
+		test $$status -eq 0 || test $$status -eq 255 || \
+		{ echo "MALLET train-topics smoke check failed with exit $$status"; exit $$status; }
 
 topic-training-vocab-%: FORCE
 	@mkdir -p $(LOCAL_TOPIC_TRAIN_BASE_PATH)/logs
@@ -167,10 +203,13 @@ topic-training-eligible-newspaper:
 		--run-id $(TOPIC_TRAIN_RUN_ID)
 
 topic-training-eligible-%: FORCE
-	@while read newspaper; do \
-		test -z "$$newspaper" && continue; \
-		$(MAKE) topic-training-eligible-newspaper LANG=$* NEWSPAPER=$$newspaper; \
-	done < $(NEWSPAPERS_TO_PROCESS_FILE)
+	$(MAKE) newspaper-list-target \
+		'NEWSPAPERS_TO_PROCESS_FILE=$(call topic_train_newspapers_to_process_file,$*)' \
+		'NEWSPAPERS_TO_PROCESS_LOG_FILE=$(call topic_train_newspapers_to_process_log_file,$*)' \
+		'NEWSPAPER_FNMATCH=$(call topic_train_newspaper_fnmatch,$*)'
+	@for newspaper in $$(cat $(call topic_train_newspapers_to_process_file,$*)); do \
+		$(MAKE) topic-training-eligible-newspaper LANG=$* NEWSPAPER=$$newspaper || exit $$?; \
+	done
 
 topic-training-sample-%: FORCE
 	$(PYTHON) lib/stratified_sample.py \
