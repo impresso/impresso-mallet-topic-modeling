@@ -10,12 +10,10 @@ except ImportError:
 import re
 import sys
 from collections import Counter
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable
 from urllib.parse import urlparse
 
-from dotenv import load_dotenv
 from smart_open import open as smart_open  # type: ignore
 
 from s3_overwrite import add_force_s3_overwrite_argument, assert_can_write_uri
@@ -25,9 +23,6 @@ from impresso_cookbook import (  # type: ignore
     setup_logging,
     get_transport_params,
 )
-
-# Load S3 credentials from .env file at module level
-load_dotenv()
 
 log = logging.getLogger(__name__)
 
@@ -253,7 +248,7 @@ def main() -> int:
             f"{stats['rejected_too_short'] + stats['rejected_too_few_unique'] + stats['rejected_too_long']:,} rejected")
 
     metadata = {
-        "created_at": datetime.now(timezone.utc).isoformat(),
+        "created_at": get_timestamp(),
         "run_id": args.run_id,
         "language": args.language,
         "inputs": inputs,

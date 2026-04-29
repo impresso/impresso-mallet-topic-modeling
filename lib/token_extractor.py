@@ -68,7 +68,6 @@ import logging
 import sys
 from typing import Generator, Set, Optional, List
 from smart_open import open as smart_open  # type: ignore
-from dotenv import load_dotenv
 
 from impresso_cookbook import (  # type: ignore
     get_s3_client,
@@ -300,16 +299,13 @@ class TokenExtractor:
                 yield current_doc, current_lang, current_tokens
 
 
-def main(args: Optional[List[str]] = None) -> None:
+def main(args: Optional[List[str]] = None) -> int:
     """
     Main function to run the Token Extractor.
 
     Args:
         args: Command-line arguments (uses sys.argv if None)
     """
-    # Load environment variables from .env file
-    load_dotenv()
-
     options: argparse.Namespace = parse_arguments(args)
 
     processor: TokenExtractor = TokenExtractor(
@@ -326,11 +322,8 @@ def main(args: Optional[List[str]] = None) -> None:
     log.info("%s", options)
 
     processor.run()
+    return 0
 
 
 if __name__ == "__main__":
-    try:
-        main()
-    except Exception as e:
-        log.error(f"Processing error: {e}", exc_info=True)
-        sys.exit(2)
+    raise SystemExit(main())

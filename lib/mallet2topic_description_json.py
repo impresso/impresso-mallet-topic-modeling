@@ -6,16 +6,16 @@ try:
     import ujson as json  # type: ignore
 except ImportError:
     import json
+import logging
 import math
+import sys
 from operator import itemgetter
 from typing import Iterable
 
-from dotenv import load_dotenv
 from smart_open import open as smart_open  # type: ignore
-from impresso_cookbook import get_transport_params  # type: ignore
+from impresso_cookbook import get_transport_params, setup_logging  # type: ignore
 
-# Load S3 credentials from .env file at module level
-load_dotenv()
+log = logging.getLogger(__name__)
 
 
 def format_topic_id(topic: int, topic_model: str, lang: str, topic_count: int) -> str:
@@ -75,16 +75,28 @@ def main() -> int:
     parser.add_argument("--min-score", type=float, default=0.01)
     parser.add_argument("--min-probability", type=float, default=0.0001)
     parser.add_argument("-o", "--output", help="Output JSONL path, default stdout")
+    parser.add_argument(
+        "--log-level",
+        default="INFO",
+        choices=["DEBUG", "INFO", "WARNING", "ERROR"],
+        help="Logging level (default: %(default)s)",
+    )
+    parser.add_argument(
+        "--log-file", dest="log_file", help="Write log to FILE", metavar="FILE"
+    )
     args = parser.parse_args()
+    setup_logging(args.log_level, args.log_file, logger=log)
+
+    from contextlib import nullcontext
 
     round_digits = math.ceil(abs(math.log10(args.min_probability))) + 1
-    out = (
+
+    out_ctx = (
         smart_open(args.output, "w", encoding="utf-8", transport_params=get_transport_params(args.output))
         if args.output
-        else None
+        else nullcontext(sys.stdout)
     )
-    try:
-        handle = out
+    with out_ctx as out:
         for records in iter_topic_records(args.input, args.min_score):
             normalized = normalize(records, args.min_probability)
             if not normalized:
@@ -102,15 +114,8 @@ def main() -> int:
                     for _, word, prob in normalized[: args.max_words]
                 ],
             }
-            line = json.dumps(item, ensure_ascii=False, separators=(",", ":"))
-            if handle:
-                handle.write(line)
-                handle.write("\n")
-            else:
-                print(line)
-    finally:
-        if out:
-            out.close()
+            out.write(json.dumps(item, ensure_ascii=False, separators=(",", ":")))
+            out.write("\n")
 
     return 0
 

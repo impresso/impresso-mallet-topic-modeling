@@ -5,10 +5,7 @@ from __future__ import annotations
 import argparse
 from urllib.parse import urlparse
 
-from dotenv import load_dotenv
 from impresso_cookbook import get_s3_client  # type: ignore
-
-load_dotenv()  # Load credentials at module level
 
 
 def parse_bool(value: str | bool) -> bool:
