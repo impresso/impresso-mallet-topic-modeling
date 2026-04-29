@@ -4,7 +4,10 @@
 import argparse
 import heapq
 import hashlib
-import json
+try:
+    import ujson as json  # type: ignore
+except ImportError:
+    import json
 import re
 import sys
 from collections import Counter, defaultdict

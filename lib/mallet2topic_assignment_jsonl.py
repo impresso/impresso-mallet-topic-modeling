@@ -3,7 +3,10 @@
 import logging
 import argparse
 import math
-import json
+try:
+    import ujson as json  # type: ignore
+except ImportError:
+    import json
 import re
 import collections
 try:

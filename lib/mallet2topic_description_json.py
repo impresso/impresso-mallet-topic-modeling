@@ -2,7 +2,10 @@
 """Convert MALLET topic-word weights to Impresso topic description JSONL."""
 
 import argparse
-import json
+try:
+    import ujson as json  # type: ignore
+except ImportError:
+    import json
 import math
 from operator import itemgetter
 from typing import Iterable

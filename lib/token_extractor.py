@@ -59,7 +59,10 @@ Integration with impresso_cookbook:
     - Uses get_transport_params() for automatic S3/local file handling
 """
 
-import json
+try:
+    import ujson as json  # type: ignore
+except ImportError:
+    import json
 import argparse
 import logging
 import sys

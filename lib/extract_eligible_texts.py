@@ -2,7 +2,10 @@
 """Extract eligible MALLET training texts from linguistic-processing JSONL."""
 
 import argparse
-import json
+try:
+    import ujson as json  # type: ignore
+except ImportError:
+    import json
 import re
 import sys
 from collections import Counter
@@ -77,9 +80,10 @@ def iter_sentences(doc: dict[str, Any], include_titles: bool) -> Iterable[dict[s
 
 
 def iter_tokens(sent: dict[str, Any]) -> Iterable[dict[str, Any]]:
-    tokens = sent.get("tokens")
+    # Get tokens array (try "tok" first, then "tokens")
+    tokens = sent.get("tok")
     if tokens is None:
-        tokens = sent.get("tok", [])
+        tokens = sent.get("tokens", [])
     yield from tokens or []
 
 
@@ -108,7 +112,11 @@ def extract_doc_lemmas(
         for token in iter_tokens(sent):
             if token.get("p") not in pos_tags:
                 continue
-            lemma = str(token.get("l") or token.get("t") or "").strip().lower()
+            # Get lemma (try "l" first if non-empty, then fall back to "t")
+            lemma_raw = token.get("l") or ""
+            if not lemma_raw.strip():
+                lemma_raw = token.get("t") or ""
+            lemma = lemma_raw.strip().lower()
             if len(lemma) < min_lemma_length:
                 continue
             if lemma not in vocab:
@@ -136,7 +144,8 @@ def main() -> int:
     parser.add_argument("--min-vocab-tokens", type=int, default=10)
     parser.add_argument("--min-unique-lemmas", type=int, default=5)
     parser.add_argument("--max-tokens", type=int, default=1500)
-    parser.add_argument("--include-titles", action="store_true")
+    parser.add_argument("--include-titles", action="store_true", default=True)
+    parser.add_argument("--no-include-titles", dest="include_titles", action="store_false")
     parser.add_argument("--output", required=True)
     parser.add_argument("--stats-output", required=True)
     parser.add_argument("--run-id", required=True)

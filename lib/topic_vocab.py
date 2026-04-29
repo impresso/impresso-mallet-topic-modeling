@@ -4,7 +4,10 @@
 import argparse
 import bz2
 import hashlib
-import json
+try:
+    import ujson as json  # type: ignore
+except ImportError:
+    import json
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
