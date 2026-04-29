@@ -19,7 +19,7 @@ from s3_overwrite import add_force_s3_overwrite_argument, assert_can_write_uri
 load_dotenv()
 
 try:
-    from impresso_cookbook import get_s3_client  # type: ignore
+    from impresso_cookbook import get_s3_client, get_transport_params  # type: ignore
 except ImportError:
     # Fallback for environments without impresso_cookbook
     def get_s3_client():
@@ -31,6 +31,18 @@ except ImportError:
             aws_secret_access_key=os.environ.get("SE_SECRET_KEY"),
             endpoint_url=os.environ.get("SE_HOST_URL")
         )
+    
+    def get_transport_params(path: str) -> dict:
+        import os
+        if not path.startswith("s3://"):
+            return {}
+        return {
+            "client_kwargs": {
+                "aws_access_key_id": os.environ.get("SE_ACCESS_KEY"),
+                "aws_secret_access_key": os.environ.get("SE_SECRET_KEY"),
+                "endpoint_url": os.environ.get("SE_HOST_URL")
+            }
+        }
 
 
 def smart_open_text(path: str, *, raw: bool = False):
@@ -129,7 +141,7 @@ def write_rows(
             out.write(f"{lemma}\t{document_frequency}\t{total_frequency}\t{doc_ids}\n")
         return
 
-    with smart_open(path, "w", encoding="utf-8") as out:
+    with smart_open(path, "w", encoding="utf-8", transport_params=get_transport_params(path)) as out:
         if header:
             out.write("lemma\tdocument_frequency\ttotal_frequency\tdocument_ids\n")
         for lemma, document_frequency, total_frequency, doc_ids in rows:
@@ -137,7 +149,7 @@ def write_rows(
 
 
 def write_words(path: str, rows: Iterable[tuple[str, int, int, str]]) -> None:
-    with smart_open(path, "w", encoding="utf-8") as out:
+    with smart_open(path, "w", encoding="utf-8", transport_params=get_transport_params(path)) as out:
         for lemma, _, _, _ in rows:
             out.write(f"{lemma}\n")
 
@@ -250,7 +262,7 @@ def main() -> int:
                 "max_document_frequency": args.max_document_frequency,
             },
         }
-        with smart_open(args.metadata_output, "w", encoding="utf-8") as handle:
+        with smart_open(args.metadata_output, "w", encoding="utf-8", transport_params=get_transport_params(args.metadata_output)) as handle:
             json.dump(metadata, handle, ensure_ascii=False, indent=2, sort_keys=True)
             handle.write("\n")
 
