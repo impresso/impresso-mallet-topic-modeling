@@ -21,7 +21,13 @@ except ImportError:
     # Fallback for environments without impresso_cookbook
     def get_s3_client():
         import boto3
-        return boto3.client("s3")
+        import os
+        return boto3.client(
+            "s3",
+            aws_access_key_id=os.environ.get("SE_ACCESS_KEY"),
+            aws_secret_access_key=os.environ.get("SE_SECRET_KEY"),
+            endpoint_url=os.environ.get("SE_HOST_URL")
+        )
 
 
 def smart_open_text(path: str, *, raw: bool = False):

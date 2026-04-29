@@ -40,11 +40,26 @@ except ImportError:
         )
     
     def get_transport_params(path: str) -> dict:
-        return {}
+        import os
+        if not path.startswith("s3://"):
+            return {}
+        return {
+            "client_kwargs": {
+                "aws_access_key_id": os.environ.get("SE_ACCESS_KEY"),
+                "aws_secret_access_key": os.environ.get("SE_SECRET_KEY"),
+                "endpoint_url": os.environ.get("SE_HOST_URL")
+            }
+        }
     
     def get_s3_client():
         import boto3
-        return boto3.client('s3')
+        import os
+        return boto3.client(
+            's3',
+            aws_access_key_id=os.environ.get('SE_ACCESS_KEY'),
+            aws_secret_access_key=os.environ.get('SE_SECRET_KEY'),
+            endpoint_url=os.environ.get('SE_HOST_URL')
+        )
     
     def get_timestamp() -> str:
         return datetime.now(timezone.utc).isoformat()
