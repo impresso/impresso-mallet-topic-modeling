@@ -12,6 +12,9 @@ PYTHON ?= python3
 OS ?= $(shell uname -s)
 JAVA_PACKAGE_APT ?= openjdk-17-jre-headless
 JAVA_PACKAGE_BREW ?= openjdk@17
+NPROC ?= $(shell getconf _NPROCESSORS_ONLN 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 1)
+MAX_LOAD ?= $(NPROC)
+COLLECTION_JOBS ?= $(shell v=$$(expr $(NPROC) / 2); [ "$$v" -lt 1 ] && v=1; echo $$v)
 
 TOPIC_TRAIN_BUCKET ?= 130-component-sandbox
 TOPIC_TRAIN_FINAL_BUCKET ?= 132-component-final
@@ -128,6 +131,7 @@ help-topic-training:
 	@echo "  make topic-training-vocab-LANG"
 	@echo "  make topic-training-eligible-newspaper LANG=de NEWSPAPER=BL/AATA"
 	@echo "  make topic-training-eligible-LANG"
+	@echo "  make topic-training-eligible-LANG COLLECTION_JOBS=4 MAX_LOAD=8"
 	@echo "  make topic-training-sample-LANG"
 	@echo "  make topic-training-import-LANG"
 	@echo "  make topic-training-train-LANG"
@@ -207,9 +211,12 @@ topic-training-eligible-%: FORCE
 		'NEWSPAPERS_TO_PROCESS_FILE=$(call topic_train_newspapers_to_process_file,$*)' \
 		'NEWSPAPERS_TO_PROCESS_LOG_FILE=$(call topic_train_newspapers_to_process_log_file,$*)' \
 		'NEWSPAPER_FNMATCH=$(call topic_train_newspaper_fnmatch,$*)'
-	@for newspaper in $$(cat $(call topic_train_newspapers_to_process_file,$*)); do \
-		$(MAKE) topic-training-eligible-newspaper LANG=$* NEWSPAPER=$$newspaper || exit $$?; \
-	done
+	@parallel --version | grep -q 'GNU parallel' || { echo "GNU parallel is required for topic-training-eligible"; exit 2; }; \
+	tr -s '[:space:]' '\n' < $(call topic_train_newspapers_to_process_file,$*) | \
+		parallel --halt soon,fail=1 --line-buffer \
+			--jobs $(COLLECTION_JOBS) \
+			--load $(MAX_LOAD) \
+			$(MAKE) topic-training-eligible-newspaper LANG=$* NEWSPAPER={}
 
 topic-training-sample-%: FORCE
 	$(PYTHON) lib/stratified_sample.py \
