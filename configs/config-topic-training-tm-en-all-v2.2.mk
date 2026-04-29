@@ -54,7 +54,6 @@ TOPIC_TRAIN_LOWERCASE_TOKEN ?= false
 # Vocabulary trimming. Adjust these after inspecting English lemmafreq coverage.
 TOPIC_TRAIN_VOCAB_MIN_FREQ ?= 9
 TOPIC_TRAIN_VOCAB_MAX_FREQ ?= 5000
-TOPIC_TRAIN_NEGATIVE_LIST_DIR ?= resources/negativelemmas
 TOPIC_TRAIN_INCLUDE_VOCAB_DIR ?= resources/include-vocab
 TOPIC_TRAIN_EXCLUDE_VOCAB_DIR ?= resources/exclude-vocab
 

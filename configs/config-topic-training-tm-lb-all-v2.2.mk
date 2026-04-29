@@ -54,9 +54,10 @@ TOPIC_TRAIN_LOWERCASE_TOKEN ?= true
 # Vocabulary trimming. Adjust these after inspecting Luxembourgish lemmafreq coverage.
 TOPIC_TRAIN_VOCAB_MIN_FREQ ?= 9
 TOPIC_TRAIN_VOCAB_MAX_FREQ ?= 50000
-TOPIC_TRAIN_NEGATIVE_LIST_DIR ?= resources/negativelemmas
 TOPIC_TRAIN_INCLUDE_VOCAB_DIR ?= resources/include-vocab
 TOPIC_TRAIN_EXCLUDE_VOCAB_DIR ?= resources/exclude-vocab
+# Optional reviewed diagnostics to apply in addition to resources/exclude-vocab/lb.txt.
+# TOPIC_TRAIN_ADDITIONAL_EXCLUDE_VOCAB_lb ?= s3://130-component-sandbox/topics-mallet/tm-lb-all-v2.2/diagnostics/tm-lb-all-v2.2-df-exclusion.docfreq-lte-2.txt
 
 # Eligible-text and sampling defaults.
 TOPIC_TRAIN_MAX_TOKENS ?= 1000

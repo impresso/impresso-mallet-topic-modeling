@@ -23,7 +23,7 @@ outputs produced here.
   `config-topic-training-tm-en-all-v2.2.mk`.
 - `lib/`: Python command-line utilities for vocabulary building, eligible-text
   extraction, sampling, MALLET output conversion, and local/S3 copying.
-- `resources/negativelemmas/`: language-specific deny lists used by vocabulary
+- `resources/exclude-vocab/`: language-specific deny lists used by vocabulary
   filtering.
 - `mallet/`: vendored MALLET executable and Java jars.
 - `PLANNING.md`: current training pipeline design and artifact layout.

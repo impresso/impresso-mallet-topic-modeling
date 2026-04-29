@@ -95,17 +95,31 @@ def main() -> int:
     parser.add_argument("--min-frequency", type=int, required=True)
     parser.add_argument("--max-frequency", type=int, required=True)
     parser.add_argument("--min-length", type=int, default=3)
-    parser.add_argument("--negative-list", help="Words to exclude")
+    parser.add_argument(
+        "--negative-list",
+        action="append",
+        default=[],
+        help="Words to exclude. Can be provided multiple times.",
+    )
     parser.add_argument("--include-vocab", help="Optional allow-list")
-    parser.add_argument("--exclude-vocab", help="Optional deny-list")
+    parser.add_argument(
+        "--exclude-vocab",
+        action="append",
+        default=[],
+        help="Optional deny-list. Can be provided multiple times.",
+    )
     parser.add_argument("--output", required=True, help="Output vocab TSV")
     parser.add_argument("--metadata-output", required=True, help="Output metadata JSON")
     parser.add_argument("--run-id", required=True)
     args = parser.parse_args()
 
-    negative_words = read_word_file(args.negative_list)
+    negative_words: set[str] = set()
+    for negative_list in args.negative_list:
+        negative_words.update(read_word_file(negative_list))
     include_words = read_word_file(args.include_vocab)
-    exclude_words = read_word_file(args.exclude_vocab)
+    exclude_words: set[str] = set()
+    for exclude_vocab in args.exclude_vocab:
+        exclude_words.update(read_word_file(exclude_vocab))
 
     with smart_open(args.lemmafreq, "r", encoding="utf-8") as handle:
         data = json.load(handle)
@@ -140,12 +154,16 @@ def main() -> int:
             "min_frequency": args.min_frequency,
             "max_frequency": args.max_frequency,
             "min_length": args.min_length,
-            "negative_list": args.negative_list,
-            "negative_list_sha256": sha256_path(args.negative_list),
+            "negative_lists": args.negative_list,
+            "negative_list_sha256": {
+                path: sha256_path(path) for path in args.negative_list
+            },
             "include_vocab": args.include_vocab,
             "include_vocab_sha256": sha256_path(args.include_vocab),
-            "exclude_vocab": args.exclude_vocab,
-            "exclude_vocab_sha256": sha256_path(args.exclude_vocab),
+            "exclude_vocabs": args.exclude_vocab,
+            "exclude_vocab_sha256": {
+                path: sha256_path(path) for path in args.exclude_vocab
+            },
         },
         "counts": {
             "source_vocab_size": len(freqs),

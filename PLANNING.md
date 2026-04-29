@@ -107,7 +107,7 @@ Input:
 
 ```text
 s3://.../lemma-freq/{RUN_ID_LINGPROC}/{lang}/ALL.upos-PROPN_NOUN.minlength-2.lemmafreq.json.bz2
-resources/negativelemmas/{lang}.txt
+resources/exclude-vocab/{lang}.txt
 optional include/exclude vocabulary files
 ```
 

@@ -20,6 +20,7 @@ TOPIC_TRAIN_BUCKET ?= 130-component-sandbox
 TOPIC_TRAIN_FINAL_BUCKET ?= 132-component-final
 TOPIC_TRAIN_PREFIX ?= topics-mallet
 TOPIC_TRAIN_RUN_ID ?= tm-training-v1
+TOPIC_TRAIN_MODEL_ID ?= $(TOPIC_TRAIN_RUN_ID)
 TOPIC_TRAIN_LANGS ?= de fr en lb
 
 S3_BUCKET_LINGPROC_COMPONENT ?= UNCONFIGURED-LINGPROC-COMPONENT-BUCKET
@@ -45,9 +46,9 @@ TOPIC_TRAIN_POS_TAGS ?= PROPN,NOUN
 TOPIC_TRAIN_MIN_LEMMA_LENGTH ?= 3
 TOPIC_TRAIN_VOCAB_MIN_FREQ ?= 400
 TOPIC_TRAIN_VOCAB_MAX_FREQ ?= 2000000
-TOPIC_TRAIN_NEGATIVE_LIST_DIR ?= resources/negativelemmas
 TOPIC_TRAIN_INCLUDE_VOCAB_DIR ?= resources/include-vocab
 TOPIC_TRAIN_EXCLUDE_VOCAB_DIR ?= resources/exclude-vocab
+TOPIC_TRAIN_ADDITIONAL_EXCLUDE_VOCAB ?=
 
 TOPIC_TRAIN_MIN_VOCAB_TOKENS ?= 10
 TOPIC_TRAIN_MIN_UNIQUE_LEMMAS ?= 5
@@ -72,11 +73,20 @@ MALLET_SMOKE_DOCS ?= 1000
 MALLET_SMOKE_INFER_ITERATIONS ?= 100
 MALLET_TOPIC_ASSIGNMENT_THRESHOLD ?= 0.02
 TOPIC_TRAIN_WORD_THRESHOLD ?= 200
+TOPIC_TRAIN_NEGATIVE_DOC_FREQ_MAX ?= 2
 
 topic_train_vocab_s3 = $(S3_TOPIC_TRAIN_BASE_PATH)/vocab/$(1).vocab.tsv.bz2
 topic_train_vocab_meta_s3 = $(S3_TOPIC_TRAIN_BASE_PATH)/vocab/$(1).vocab.metadata.json
 topic_train_eligible_s3 = $(S3_TOPIC_TRAIN_BASE_PATH)/eligible/$(2)/$(1).eligible.tsv.bz2
 topic_train_eligible_stats_s3 = $(S3_TOPIC_TRAIN_BASE_PATH)/eligible/$(2)/$(1).stats.json
+topic_train_singleton_lemmas_s3 = $(S3_TOPIC_TRAIN_BASE_PATH)/diagnostics/$(TOPIC_TRAIN_MODEL_ID)-df-singletons.tsv.bz2
+topic_train_singleton_lemmas_meta_s3 = $(S3_TOPIC_TRAIN_BASE_PATH)/diagnostics/$(TOPIC_TRAIN_MODEL_ID)-df-singletons.metadata.json
+topic_train_rare_docfreq_negative_lemmas_s3 = $(S3_TOPIC_TRAIN_BASE_PATH)/diagnostics/$(TOPIC_TRAIN_MODEL_ID)-df-exclusion.docfreq-lte-$(TOPIC_TRAIN_NEGATIVE_DOC_FREQ_MAX).tsv.bz2
+topic_train_rare_docfreq_negative_lemmas_meta_s3 = $(S3_TOPIC_TRAIN_BASE_PATH)/diagnostics/$(TOPIC_TRAIN_MODEL_ID)-df-exclusion.docfreq-lte-$(TOPIC_TRAIN_NEGATIVE_DOC_FREQ_MAX).metadata.json
+topic_train_singleton_lemmas_word_s3 = $(S3_TOPIC_TRAIN_BASE_PATH)/diagnostics/$(TOPIC_TRAIN_MODEL_ID)-df-singletons.txt
+topic_train_rare_docfreq_negative_lemmas_word_s3 = $(S3_TOPIC_TRAIN_BASE_PATH)/diagnostics/$(TOPIC_TRAIN_MODEL_ID)-df-exclusion.docfreq-lte-$(TOPIC_TRAIN_NEGATIVE_DOC_FREQ_MAX).txt
+topic_train_additional_exclude_vocab = $(strip $(TOPIC_TRAIN_ADDITIONAL_EXCLUDE_VOCAB) $(value TOPIC_TRAIN_ADDITIONAL_EXCLUDE_VOCAB_$(1)))
+topic_train_exclude_vocab_args = $(foreach file,$(wildcard $(TOPIC_TRAIN_EXCLUDE_VOCAB_DIR)/$(1).txt) $(call topic_train_additional_exclude_vocab,$(1)),--exclude-vocab $(file))
 topic_train_sample_s3 = $(S3_TOPIC_TRAIN_BASE_PATH)/sample/$(1)/sample.tsv.bz2
 topic_train_sample_manifest_s3 = $(S3_TOPIC_TRAIN_BASE_PATH)/sample/$(1)/sample.manifest.json
 
@@ -132,6 +142,9 @@ help-topic-training:
 	@echo "  make topic-training-eligible-newspaper LANG=de NEWSPAPER=BL/AATA"
 	@echo "  make topic-training-eligible-LANG"
 	@echo "  make topic-training-eligible-LANG COLLECTION_JOBS=4 MAX_LOAD=8"
+	@echo "  make topic-training-singleton-lemmas-LANG"
+	@echo "  make topic-training-rare-docfreq-negative-lemmas-LANG"
+	@echo "  make topic-training-vocab-LANG TOPIC_TRAIN_ADDITIONAL_EXCLUDE_VOCAB_LANG=s3://..."
 	@echo "  make topic-training-sample-LANG"
 	@echo "  make topic-training-import-LANG"
 	@echo "  make topic-training-train-LANG"
@@ -180,9 +193,8 @@ topic-training-vocab-%: FORCE
 		--min-frequency $(TOPIC_TRAIN_VOCAB_MIN_FREQ) \
 		--max-frequency $(TOPIC_TRAIN_VOCAB_MAX_FREQ) \
 		--min-length $(TOPIC_TRAIN_MIN_LEMMA_LENGTH) \
-		--negative-list $(TOPIC_TRAIN_NEGATIVE_LIST_DIR)/$*.txt \
 		$(if $(wildcard $(TOPIC_TRAIN_INCLUDE_VOCAB_DIR)/$*.txt),--include-vocab $(TOPIC_TRAIN_INCLUDE_VOCAB_DIR)/$*.txt,) \
-		$(if $(wildcard $(TOPIC_TRAIN_EXCLUDE_VOCAB_DIR)/$*.txt),--exclude-vocab $(TOPIC_TRAIN_EXCLUDE_VOCAB_DIR)/$*.txt,) \
+		$(call topic_train_exclude_vocab_args,$*) \
 		--output $(call topic_train_vocab_s3,$*) \
 		--metadata-output $(call topic_train_vocab_meta_s3,$*) \
 		--run-id $(TOPIC_TRAIN_RUN_ID)
@@ -217,6 +229,26 @@ topic-training-eligible-%: FORCE
 			--jobs $(COLLECTION_JOBS) \
 			--load $(MAX_LOAD) \
 			$(MAKE) topic-training-eligible-newspaper LANG=$* NEWSPAPER={}
+
+topic-training-singleton-lemmas-%: FORCE
+	$(PYTHON) lib/analyze_doc_freq.py \
+		--s3-prefix $(S3_TOPIC_TRAIN_BASE_PATH)/eligible/$*/ \
+		--input-suffix .eligible.tsv.bz2 \
+		--max-document-frequency 1 \
+		--output $(call topic_train_singleton_lemmas_s3,$*) \
+		--word-output $(call topic_train_singleton_lemmas_word_s3,$*) \
+		--metadata-output $(call topic_train_singleton_lemmas_meta_s3,$*)
+	@echo "Review $(call topic_train_singleton_lemmas_word_s3,$*) and manually update $(TOPIC_TRAIN_EXCLUDE_VOCAB_DIR)/$*.txt if the lemmas should be excluded from future vocab builds."
+
+topic-training-rare-docfreq-negative-lemmas-%: FORCE
+	$(PYTHON) lib/analyze_doc_freq.py \
+		--s3-prefix $(S3_TOPIC_TRAIN_BASE_PATH)/eligible/$*/ \
+		--input-suffix .eligible.tsv.bz2 \
+		--max-document-frequency $(TOPIC_TRAIN_NEGATIVE_DOC_FREQ_MAX) \
+		--output $(call topic_train_rare_docfreq_negative_lemmas_s3,$*) \
+		--word-output $(call topic_train_rare_docfreq_negative_lemmas_word_s3,$*) \
+		--metadata-output $(call topic_train_rare_docfreq_negative_lemmas_meta_s3,$*)
+	@echo "Review $(call topic_train_rare_docfreq_negative_lemmas_word_s3,$*) and manually update $(TOPIC_TRAIN_EXCLUDE_VOCAB_DIR)/$*.txt if the lemmas should be excluded from future vocab builds."
 
 topic-training-sample-%: FORCE
 	$(PYTHON) lib/stratified_sample.py \

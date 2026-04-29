@@ -9,7 +9,6 @@ except ImportError:
     import json
 import re
 import sys
-import tempfile
 from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
@@ -120,22 +119,6 @@ def document_bucket(ci_id: str) -> tuple[str, str]:
     return newspaper, f"{year // 10 * 10}s"
 
 
-def is_s3_path(path: str) -> bool:
-    """Check if a path is an S3 URI."""
-    return path.startswith("s3://")
-
-
-def upload_to_s3(local_path: str, s3_path: str) -> None:
-    """Upload a local file to S3."""
-    log.info(f"Uploading {local_path} to {s3_path}")
-    parsed = urlparse(s3_path)
-    bucket = parsed.netloc
-    key = parsed.path.lstrip("/")
-    client = get_s3_client()
-    client.upload_file(local_path, bucket, key)
-    log.info(f"Successfully uploaded to {s3_path}")
-
-
 def extract_doc_lemmas(
     doc: dict[str, Any],
     *,
@@ -223,133 +206,88 @@ def main() -> int:
     stats: Counter[str] = Counter()
     strata: Counter[str] = Counter()
 
-    # Determine output paths (use temp files for S3 destinations)
-    output_path = args.output
-    stats_output_path = args.stats_output
-    output_is_s3 = is_s3_path(args.output)
-    stats_is_s3 = is_s3_path(args.stats_output)
+    log.info(f"Writing output to {args.output}")
+    with smart_open(args.output, "w", encoding="utf-8", transport_params=get_transport_params(args.output)) as out:
+        for path in inputs:
+            stats["input_files"] += 1
+            log.debug(f"Processing file {stats['input_files']}/{len(inputs)}: {path}")
+            with smart_open(path, "r", encoding="utf-8", transport_params=get_transport_params(path)) as handle:
+                for line_number, line in enumerate(handle, 1):
+                    stats["input_lines"] += 1
+                    try:
+                        doc = json.loads(line)
+                    except json.JSONDecodeError as e:
+                        stats["json_errors"] += 1
+                        log.debug(f"JSON decode error at {path}:{line_number}: {e}")
+                        continue
+
+                    ci_id = str(doc.get("ci_id") or doc.get("id") or "")
+                    if not ci_id:
+                        stats["missing_ci_id"] += 1
+                        log.debug(f"Missing ci_id at {path}:{line_number}")
+                        continue
+
+                    lemmas = extract_doc_lemmas(
+                        doc,
+                        language=args.language,
+                        pos_tags=pos_tags,
+                        min_lemma_length=args.min_lemma_length,
+                        vocab=vocab,
+                        include_titles=args.include_titles,
+                    )
+                    stats["docs_seen"] += 1
+                    stats["accepted_vocab_tokens"] += len(lemmas)
+
+                    if stats["docs_seen"] % 10000 == 0:
+                        total_rejected = stats['rejected_too_short'] + stats['rejected_too_few_unique'] + stats['rejected_too_long']
+                        log.info(f"Progress: {stats['docs_seen']:,} documents processed, "
+                                f"{stats['docs_written']:,} written, {total_rejected:,} rejected")
+
+                    unique_count = len(set(lemmas))
+                    if len(lemmas) < args.min_vocab_tokens:
+                        stats["rejected_too_short"] += 1
+                        continue
+                    if unique_count < args.min_unique_lemmas:
+                        stats["rejected_too_few_unique"] += 1
+                        continue
+                    if len(lemmas) > args.max_tokens:
+                        stats["rejected_too_long"] += 1
+                        continue
+
+                    newspaper, decade = document_bucket(ci_id)
+                    strata[f"{newspaper}\t{decade}"] += 1
+                    stats["docs_written"] += 1
+                    out.write(f"{ci_id}\tDUMMY\t{' '.join(lemmas)}\n")
     
-    temp_output = None
-    temp_stats = None
+    log.info(f"Processing complete: {stats['docs_seen']:,} documents processed, "
+            f"{stats['docs_written']:,} written, "
+            f"{stats['rejected_too_short'] + stats['rejected_too_few_unique'] + stats['rejected_too_long']:,} rejected")
+
+    metadata = {
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "run_id": args.run_id,
+        "language": args.language,
+        "inputs": inputs,
+        "vocab": args.vocab,
+        "criteria": {
+            "pos_tags": sorted(pos_tags),
+            "min_lemma_length": args.min_lemma_length,
+            "min_vocab_tokens": args.min_vocab_tokens,
+            "min_unique_lemmas": args.min_unique_lemmas,
+            "max_tokens": args.max_tokens,
+            "include_titles": args.include_titles,
+        },
+        "counts": dict(stats),
+        "strata": dict(sorted(strata.items())),
+    }
     
-    try:
-        if output_is_s3:
-            temp_output = tempfile.NamedTemporaryFile(mode='w', encoding='utf-8', delete=False, suffix='.txt')
-            output_path = temp_output.name
-            log.info(f"Writing output to temporary file {output_path} (will upload to {args.output})")
-        else:
-            log.info(f"Writing output to {args.output}")
-        
-        if stats_is_s3:
-            temp_stats = tempfile.NamedTemporaryFile(mode='w', encoding='utf-8', delete=False, suffix='.json')
-            stats_output_path = temp_stats.name
-            log.info(f"Writing statistics to temporary file {stats_output_path} (will upload to {args.stats_output})")
-
-        with smart_open(output_path, "w", encoding="utf-8", transport_params=get_transport_params(output_path)) as out:
-            for path in inputs:
-                stats["input_files"] += 1
-                log.debug(f"Processing file {stats['input_files']}/{len(inputs)}: {path}")
-                with smart_open(path, "r", encoding="utf-8", transport_params=get_transport_params(path)) as handle:
-                    for line_number, line in enumerate(handle, 1):
-                        stats["input_lines"] += 1
-                        try:
-                            doc = json.loads(line)
-                        except json.JSONDecodeError as e:
-                            stats["json_errors"] += 1
-                            log.debug(f"JSON decode error at {path}:{line_number}: {e}")
-                            continue
-
-                        ci_id = str(doc.get("ci_id") or doc.get("id") or "")
-                        if not ci_id:
-                            stats["missing_ci_id"] += 1
-                            log.debug(f"Missing ci_id at {path}:{line_number}")
-                            continue
-
-                        lemmas = extract_doc_lemmas(
-                            doc,
-                            language=args.language,
-                            pos_tags=pos_tags,
-                            min_lemma_length=args.min_lemma_length,
-                            vocab=vocab,
-                            include_titles=args.include_titles,
-                        )
-                        stats["docs_seen"] += 1
-                        stats["accepted_vocab_tokens"] += len(lemmas)
-
-                        if stats["docs_seen"] % 10000 == 0:
-                            total_rejected = stats['rejected_too_short'] + stats['rejected_too_few_unique'] + stats['rejected_too_long']
-                            log.info(f"Progress: {stats['docs_seen']:,} documents processed, "
-                                    f"{stats['docs_written']:,} written, {total_rejected:,} rejected")
-
-                        unique_count = len(set(lemmas))
-                        if len(lemmas) < args.min_vocab_tokens:
-                            stats["rejected_too_short"] += 1
-                            continue
-                        if unique_count < args.min_unique_lemmas:
-                            stats["rejected_too_few_unique"] += 1
-                            continue
-                        if len(lemmas) > args.max_tokens:
-                            stats["rejected_too_long"] += 1
-                            continue
-
-                        newspaper, decade = document_bucket(ci_id)
-                        strata[f"{newspaper}\t{decade}"] += 1
-                        stats["docs_written"] += 1
-                        out.write(f"{ci_id}\tDUMMY\t{' '.join(lemmas)}\n")
-        
-        log.info(f"Processing complete: {stats['docs_seen']:,} documents processed, "
-                f"{stats['docs_written']:,} written, "
-                f"{stats['rejected_too_short'] + stats['rejected_too_few_unique'] + stats['rejected_too_long']:,} rejected")
-
-        metadata = {
-            "created_at": datetime.now(timezone.utc).isoformat(),
-            "run_id": args.run_id,
-            "language": args.language,
-            "inputs": inputs,
-            "vocab": args.vocab,
-            "criteria": {
-                "pos_tags": sorted(pos_tags),
-                "min_lemma_length": args.min_lemma_length,
-                "min_vocab_tokens": args.min_vocab_tokens,
-                "min_unique_lemmas": args.min_unique_lemmas,
-                "max_tokens": args.max_tokens,
-                "include_titles": args.include_titles,
-            },
-            "counts": dict(stats),
-            "strata": dict(sorted(strata.items())),
-        }
-        
-        with smart_open(stats_output_path, "w", encoding="utf-8", transport_params=get_transport_params(stats_output_path)) as handle:
-            json.dump(metadata, handle, ensure_ascii=False, indent=2, sort_keys=True)
-            handle.write("\n")
-        
-        # Upload to S3 if needed
-        if output_is_s3:
-            upload_to_s3(output_path, args.output)
-        
-        if stats_is_s3:
-            upload_to_s3(stats_output_path, args.stats_output)
-        
-        log.info("Extraction complete")
-        return 0
+    log.info(f"Writing statistics to {args.stats_output}")
+    with smart_open(args.stats_output, "w", encoding="utf-8", transport_params=get_transport_params(args.stats_output)) as handle:
+        json.dump(metadata, handle, ensure_ascii=False, indent=2, sort_keys=True)
+        handle.write("\n")
     
-    finally:
-        # Clean up temporary files
-        if temp_output:
-            temp_output.close()
-            try:
-                Path(output_path).unlink()
-                log.debug(f"Cleaned up temporary file {output_path}")
-            except Exception as e:
-                log.warning(f"Failed to clean up temporary file {output_path}: {e}")
-        
-        if temp_stats:
-            temp_stats.close()
-            try:
-                Path(stats_output_path).unlink()
-                log.debug(f"Cleaned up temporary file {stats_output_path}")
-            except Exception as e:
-                log.warning(f"Failed to clean up temporary file {stats_output_path}: {e}")
+    log.info("Extraction complete")
+    return 0
 
 
 if __name__ == "__main__":
