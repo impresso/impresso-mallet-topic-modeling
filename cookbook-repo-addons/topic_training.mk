@@ -65,6 +65,8 @@ MALLET ?= ./mallet/bin/mallet
 MALLET_NUM_TOPICS ?= 1000
 MALLET_TRAIN_ITERATIONS ?= 1000
 MALLET_OPTIMIZE_INTERVAL ?= 10
+MALLET_OPTIMIZE_BURN_IN ?= 200
+MALLET_SHOW_TOPICS_INTERVAL ?= 50
 MALLET_THREADS ?= 8
 MALLET_TRAIN_MEMORY ?= 64g
 MALLET_STD_MEMORY ?= 16g
@@ -290,8 +292,7 @@ topic-training-import-%: FORCE
 		--keep-sequence
 	$(PYTHON) lib/copy_uri.py --force-s3-overwrite $(TOPIC_TRAIN_FORCE_S3_OVERWRITE) $(call topic_train_sample_mallet_local,$*) $(call topic_train_sample_mallet_s3,$*)
 
-topic-training-train-%: FORCE
-	$(MAKE) topic-training-import-$*
+topic-training-train-%: topic-training-import-% FORCE
 	@mkdir -p $(LOCAL_TOPIC_TRAIN_BASE_PATH)/models $(LOCAL_TOPIC_TRAIN_BASE_PATH)/metadata
 	MEMORY=$(MALLET_TRAIN_MEMORY) $(MALLET) train-topics \
 		--input $(call topic_train_sample_mallet_local,$*) \
@@ -302,8 +303,8 @@ topic-training-train-%: FORCE
 		--output-doc-topics $(call topic_train_sample_doctopics_local,$*) \
 		--num-topics $(MALLET_NUM_TOPICS) \
 		--num-iterations $(MALLET_TRAIN_ITERATIONS) \
-		--show-topics-interval 50 \
-		--burn-in 200 \
+		--show-topics-interval $(MALLET_SHOW_TOPICS_INTERVAL) \
+		--optimize-burn-in $(MALLET_OPTIMIZE_BURN_IN) \
 		--optimize-interval $(MALLET_OPTIMIZE_INTERVAL) \
 		--num-threads $(MALLET_THREADS) \
 		--random-seed $(MALLET_RANDOM_SEED)
