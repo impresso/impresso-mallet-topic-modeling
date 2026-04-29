@@ -180,7 +180,7 @@ endif
 
 check-topic-training-mallet:
 	@test -x "$(MALLET)" || { echo "MALLET executable not found or not executable: $(MALLET)"; exit 1; }
-	@java -version >/dev/null
+	@java -version >/dev/null 2>&1 || { echo "Java not found or not working"; exit 1; }
 	@$(MALLET) train-topics --help >/dev/null 2>&1; status=$$?; \
 		test $$status -eq 0 || test $$status -eq 255 || \
 		{ echo "MALLET train-topics smoke check failed with exit $$status"; exit $$status; }
