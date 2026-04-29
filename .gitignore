@@ -6,3 +6,6 @@ Makefile.local.mk
 *.log
 out.txt
 testbuild/
+*.d
+.env_java
+.env*
