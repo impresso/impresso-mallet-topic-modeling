@@ -55,10 +55,10 @@ inferencer + vocabulary/model contract -> full-corpus inference -> assignment sh
 s3://.../{TRAIN_RUN_ID}/
   vocab/{lang}.vocab.tsv.bz2
   vocab/{lang}.vocab.metadata.json
-  eligible/{lang}/{newspaper}.eligible.tsv.bz2
-  eligible/{lang}/{newspaper}.stats.json
-  sample/{lang}/sample.tsv.bz2
-  sample/{lang}/sample.manifest.json
+  eligible/{newspaper}.eligible.tsv.bz2
+  eligible/{newspaper}.stats.json
+  sample/sample.tsv.bz2
+  sample/sample.manifest.json
   mallet/{lang}.sample.mallet
   models/{lang}.model
   models/{lang}.inferencer
