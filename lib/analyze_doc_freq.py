@@ -3,6 +3,7 @@
 
 import argparse
 import json
+import logging
 import sys
 from collections import Counter
 from datetime import datetime, timezone
@@ -10,23 +11,22 @@ from pathlib import Path
 from typing import Iterable
 from urllib.parse import urlparse
 
-from dotenv import load_dotenv
 from smart_open import open as smart_open  # type: ignore
 
 from s3_overwrite import add_force_s3_overwrite_argument, assert_can_write_uri
-from impresso_cookbook import get_s3_client, get_transport_params  # type: ignore
+from impresso_cookbook import get_s3_client, get_timestamp, get_transport_params, setup_logging  # type: ignore
 
-# Load S3 credentials from .env file at module level
-load_dotenv()
+log = logging.getLogger(__name__)
 
 
 def smart_open_text(path: str, *, raw: bool = False):
+    tp = get_transport_params(path)
     if not raw:
-        return smart_open(path, "r", encoding="utf-8")
+        return smart_open(path, "r", encoding="utf-8", transport_params=tp)
     try:
-        return smart_open(path, "r", encoding="utf-8", compression="disable")
+        return smart_open(path, "r", encoding="utf-8", compression="disable", transport_params=tp)
     except TypeError:
-        return smart_open(path, "r", encoding="utf-8", ignore_ext=True)
+        return smart_open(path, "r", encoding="utf-8", ignore_ext=True, transport_params=tp)
 
 
 def list_s3(prefix: str, suffix: str) -> list[str]:
@@ -170,8 +170,18 @@ def main() -> int:
         help="Report lemmas appearing in at most this many documents.",
     )
     parser.add_argument("--no-header", action="store_true")
+    parser.add_argument(
+        "--log-level",
+        default="INFO",
+        choices=["DEBUG", "INFO", "WARNING", "ERROR"],
+        help="Logging level (default: %(default)s)",
+    )
+    parser.add_argument(
+        "--log-file", dest="log_file", help="Write log to FILE", metavar="FILE"
+    )
     add_force_s3_overwrite_argument(parser)
     args = parser.parse_args()
+    setup_logging(args.log_level, args.log_file, logger=log)
     if args.max_document_frequency < 1:
         parser.error("--max-document-frequency must be >= 1")
 
