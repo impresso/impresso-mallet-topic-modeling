@@ -302,6 +302,8 @@ topic-training-train-%: FORCE
 		--output-doc-topics $(call topic_train_sample_doctopics_local,$*) \
 		--num-topics $(MALLET_NUM_TOPICS) \
 		--num-iterations $(MALLET_TRAIN_ITERATIONS) \
+		--show-topics-interval 50 \
+		--burn-in 200 \
 		--optimize-interval $(MALLET_OPTIMIZE_INTERVAL) \
 		--num-threads $(MALLET_THREADS) \
 		--random-seed $(MALLET_RANDOM_SEED)
