@@ -4,6 +4,7 @@
 import argparse
 import heapq
 import hashlib
+import logging
 try:
     import ujson as json  # type: ignore
 except ImportError:
@@ -11,19 +12,15 @@ except ImportError:
 import re
 import sys
 from collections import Counter, defaultdict
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Iterable
 from urllib.parse import urlparse
 
-from dotenv import load_dotenv
-
 from s3_overwrite import add_force_s3_overwrite_argument, assert_can_write_uri
-from impresso_cookbook import get_s3_client, get_transport_params  # type: ignore
+from impresso_cookbook import get_s3_client, get_timestamp, get_transport_params, setup_logging  # type: ignore
 from smart_open import open as smart_open  # type: ignore
 
-# Load S3 credentials from .env file at module level
-load_dotenv()
+log = logging.getLogger(__name__)
 
 
 CI_ID_RE = re.compile(r"^(?P<newspaper>.+?)-(?P<year>\d{4})-\d{2}-\d{2}-")
@@ -118,8 +115,18 @@ def main() -> int:
     parser.add_argument("--manifest-output", required=True)
     parser.add_argument("--run-id", required=True)
     parser.add_argument("--language", required=True)
+    parser.add_argument(
+        "--log-level",
+        default="INFO",
+        choices=["DEBUG", "INFO", "WARNING", "ERROR"],
+        help="Logging level (default: %(default)s)",
+    )
+    parser.add_argument(
+        "--log-file", dest="log_file", help="Write log to FILE", metavar="FILE"
+    )
     add_force_s3_overwrite_argument(parser)
     args = parser.parse_args()
+    setup_logging(args.log_level, args.log_file, logger=log)
 
     inputs = expand_inputs(args.input, args.s3_prefix, args.input_suffix)
     if not inputs:
@@ -185,7 +192,7 @@ def main() -> int:
             out.write("\n")
 
     manifest = {
-        "created_at": datetime.now(timezone.utc).isoformat(),
+        "created_at": get_timestamp(),
         "run_id": args.run_id,
         "language": args.language,
         "inputs": inputs,

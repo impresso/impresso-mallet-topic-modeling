@@ -4,23 +4,21 @@
 import argparse
 import bz2
 import hashlib
+import logging
 try:
     import ujson as json  # type: ignore
 except ImportError:
     import json
 import sys
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Iterable
 
-from dotenv import load_dotenv
 from smart_open import open as smart_open  # type: ignore
 
 from s3_overwrite import add_force_s3_overwrite_argument, assert_can_write_uri
-from impresso_cookbook import get_transport_params  # type: ignore
+from impresso_cookbook import get_timestamp, get_transport_params, setup_logging  # type: ignore
 
-# Load S3 credentials from .env file at module level
-load_dotenv()
+log = logging.getLogger(__name__)
 
 
 def read_word_file(path: str | None, lower: bool = True) -> set[str]:
@@ -107,8 +105,18 @@ def main() -> int:
     parser.add_argument("--output", required=True, help="Output vocab TSV")
     parser.add_argument("--metadata-output", required=True, help="Output metadata JSON")
     parser.add_argument("--run-id", required=True)
+    parser.add_argument(
+        "--log-level",
+        default="INFO",
+        choices=["DEBUG", "INFO", "WARNING", "ERROR"],
+        help="Logging level (default: %(default)s)",
+    )
+    parser.add_argument(
+        "--log-file", dest="log_file", help="Write log to FILE", metavar="FILE"
+    )
     add_force_s3_overwrite_argument(parser)
     args = parser.parse_args()
+    setup_logging(args.log_level, args.log_file, logger=log)
 
     assert_can_write_uri(args.output, force_s3_overwrite=args.force_s3_overwrite)
     assert_can_write_uri(
@@ -146,7 +154,7 @@ def main() -> int:
     write_vocab(args.output, rows)
 
     metadata = {
-        "created_at": datetime.now(timezone.utc).isoformat(),
+        "created_at": get_timestamp(),
         "run_id": args.run_id,
         "language": args.language,
         "source_lemmafreq": args.lemmafreq,
