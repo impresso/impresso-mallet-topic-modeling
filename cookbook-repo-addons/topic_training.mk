@@ -77,8 +77,8 @@ TOPIC_TRAIN_NEGATIVE_DOC_FREQ_MAX ?= 2
 
 topic_train_vocab_s3 = $(S3_TOPIC_TRAIN_BASE_PATH)/vocab/$(1).vocab.tsv.bz2
 topic_train_vocab_meta_s3 = $(S3_TOPIC_TRAIN_BASE_PATH)/vocab/$(1).vocab.metadata.json
-topic_train_eligible_s3 = $(S3_TOPIC_TRAIN_BASE_PATH)/eligible/$(2)/$(1).eligible.tsv.bz2
-topic_train_eligible_stats_s3 = $(S3_TOPIC_TRAIN_BASE_PATH)/eligible/$(2)/$(1).stats.json
+topic_train_eligible_s3 = $(S3_TOPIC_TRAIN_BASE_PATH)/eligible/$(1).eligible.tsv.bz2
+topic_train_eligible_stats_s3 = $(S3_TOPIC_TRAIN_BASE_PATH)/eligible/$(1).stats.json
 topic_train_singleton_lemmas_s3 = $(S3_TOPIC_TRAIN_BASE_PATH)/diagnostics/$(TOPIC_TRAIN_MODEL_ID)-df-singletons.tsv.bz2
 topic_train_singleton_lemmas_meta_s3 = $(S3_TOPIC_TRAIN_BASE_PATH)/diagnostics/$(TOPIC_TRAIN_MODEL_ID)-df-singletons.metadata.json
 topic_train_rare_docfreq_negative_lemmas_s3 = $(S3_TOPIC_TRAIN_BASE_PATH)/diagnostics/$(TOPIC_TRAIN_MODEL_ID)-df-exclusion.docfreq-lte-$(TOPIC_TRAIN_NEGATIVE_DOC_FREQ_MAX).tsv.bz2
@@ -87,11 +87,11 @@ topic_train_singleton_lemmas_word_s3 = $(S3_TOPIC_TRAIN_BASE_PATH)/diagnostics/$
 topic_train_rare_docfreq_negative_lemmas_word_s3 = $(S3_TOPIC_TRAIN_BASE_PATH)/diagnostics/$(TOPIC_TRAIN_MODEL_ID)-df-exclusion.docfreq-lte-$(TOPIC_TRAIN_NEGATIVE_DOC_FREQ_MAX).txt
 topic_train_additional_exclude_vocab = $(strip $(TOPIC_TRAIN_ADDITIONAL_EXCLUDE_VOCAB) $(value TOPIC_TRAIN_ADDITIONAL_EXCLUDE_VOCAB_$(1)))
 topic_train_exclude_vocab_args = $(foreach file,$(wildcard $(TOPIC_TRAIN_EXCLUDE_VOCAB_DIR)/$(1).txt) $(call topic_train_additional_exclude_vocab,$(1)),--exclude-vocab $(file))
-topic_train_sample_s3 = $(S3_TOPIC_TRAIN_BASE_PATH)/sample/$(1)/sample.tsv.bz2
-topic_train_sample_manifest_s3 = $(S3_TOPIC_TRAIN_BASE_PATH)/sample/$(1)/sample.manifest.json
+topic_train_sample_s3 = $(S3_TOPIC_TRAIN_BASE_PATH)/sample/sample.tsv.bz2
+topic_train_sample_manifest_s3 = $(S3_TOPIC_TRAIN_BASE_PATH)/sample/sample.manifest.json
 
 topic_train_local_dir = $(LOCAL_TOPIC_TRAIN_BASE_PATH)/$(1)
-topic_train_sample_local = $(LOCAL_TOPIC_TRAIN_BASE_PATH)/sample/$(1)/sample.tsv
+topic_train_sample_local = $(LOCAL_TOPIC_TRAIN_BASE_PATH)/sample/sample.tsv
 topic_train_sample_mallet_local = $(LOCAL_TOPIC_TRAIN_BASE_PATH)/mallet/$(1).sample.mallet
 topic_train_model_local = $(LOCAL_TOPIC_TRAIN_BASE_PATH)/models/$(1).model
 topic_train_inferencer_local = $(LOCAL_TOPIC_TRAIN_BASE_PATH)/models/$(1).inferencer
@@ -118,7 +118,7 @@ topic_train_smoke_assignment_s3 = $(S3_TOPIC_TRAIN_BASE_PATH)/smoke/$(1).topic_a
 topic_train_metadata_s3 = $(S3_TOPIC_TRAIN_BASE_PATH)/metadata/$(1).training.json
 topic_train_final_vocab_s3 = $(S3_TOPIC_TRAIN_FINAL_BASE_PATH)/vocab/$(1).vocab.tsv.bz2
 topic_train_final_vocab_meta_s3 = $(S3_TOPIC_TRAIN_FINAL_BASE_PATH)/vocab/$(1).vocab.metadata.json
-topic_train_final_sample_manifest_s3 = $(S3_TOPIC_TRAIN_FINAL_BASE_PATH)/sample/$(1)/sample.manifest.json
+topic_train_final_sample_manifest_s3 = $(S3_TOPIC_TRAIN_FINAL_BASE_PATH)/sample/sample.manifest.json
 topic_train_final_sample_mallet_s3 = $(S3_TOPIC_TRAIN_FINAL_BASE_PATH)/mallet/$(1).sample.mallet
 topic_train_final_model_s3 = $(S3_TOPIC_TRAIN_FINAL_BASE_PATH)/models/$(1).model
 topic_train_final_inferencer_s3 = $(S3_TOPIC_TRAIN_FINAL_BASE_PATH)/models/$(1).inferencer
@@ -214,8 +214,8 @@ topic-training-eligible-newspaper:
 		--min-unique-lemmas $(TOPIC_TRAIN_MIN_UNIQUE_LEMMAS) \
 		--max-tokens $(TOPIC_TRAIN_MAX_TOKENS) \
 		$(if $(filter true,$(TOPIC_TRAIN_INCLUDE_TITLES)),--include-titles,) \
-		--output $(call topic_train_eligible_s3,$(NEWSPAPER),$(LANG)) \
-		--stats-output $(call topic_train_eligible_stats_s3,$(NEWSPAPER),$(LANG)) \
+		--output $(call topic_train_eligible_s3,$(NEWSPAPER)) \
+		--stats-output $(call topic_train_eligible_stats_s3,$(NEWSPAPER)) \
 		--run-id $(TOPIC_TRAIN_RUN_ID)
 
 topic-training-eligible-%: FORCE
@@ -232,7 +232,7 @@ topic-training-eligible-%: FORCE
 
 topic-training-singleton-lemmas-%: FORCE
 	$(PYTHON) lib/analyze_doc_freq.py \
-		--s3-prefix $(S3_TOPIC_TRAIN_BASE_PATH)/eligible/$*/ \
+		--s3-prefix $(S3_TOPIC_TRAIN_BASE_PATH)/eligible/ \
 		--input-suffix .eligible.tsv.bz2 \
 		--max-document-frequency 1 \
 		--output $(call topic_train_singleton_lemmas_s3,$*) \
@@ -242,7 +242,7 @@ topic-training-singleton-lemmas-%: FORCE
 
 topic-training-rare-docfreq-negative-lemmas-%: FORCE
 	$(PYTHON) lib/analyze_doc_freq.py \
-		--s3-prefix $(S3_TOPIC_TRAIN_BASE_PATH)/eligible/$*/ \
+		--s3-prefix $(S3_TOPIC_TRAIN_BASE_PATH)/eligible/ \
 		--input-suffix .eligible.tsv.bz2 \
 		--max-document-frequency $(TOPIC_TRAIN_NEGATIVE_DOC_FREQ_MAX) \
 		--output $(call topic_train_rare_docfreq_negative_lemmas_s3,$*) \
@@ -252,7 +252,7 @@ topic-training-rare-docfreq-negative-lemmas-%: FORCE
 
 topic-training-sample-%: FORCE
 	$(PYTHON) lib/stratified_sample.py \
-		--s3-prefix $(S3_TOPIC_TRAIN_BASE_PATH)/eligible/$*/ \
+		--s3-prefix $(S3_TOPIC_TRAIN_BASE_PATH)/eligible/ \
 		--input-suffix .eligible.tsv.bz2 \
 		--sample-size $(TOPIC_TRAIN_SAMPLE_SIZE) \
 		--seed $(TOPIC_TRAIN_SAMPLE_SEED) \
@@ -265,7 +265,7 @@ topic-training-sample-%: FORCE
 		--language $*
 
 topic-training-import-%: FORCE
-	@mkdir -p $(LOCAL_TOPIC_TRAIN_BASE_PATH)/sample/$* $(LOCAL_TOPIC_TRAIN_BASE_PATH)/mallet
+	@mkdir -p $(LOCAL_TOPIC_TRAIN_BASE_PATH)/sample $(LOCAL_TOPIC_TRAIN_BASE_PATH)/mallet
 	$(PYTHON) lib/copy_uri.py $(call topic_train_sample_s3,$*) $(call topic_train_sample_local,$*)
 	MEMORY=$(MALLET_STD_MEMORY) $(MALLET) import-file \
 		--input $(call topic_train_sample_local,$*) \

@@ -1,11 +1,11 @@
 # Luxembourgish MALLET topic-training configuration.
 #
 # This config mirrors the existing inference model specification:
-#   tm-lb-all-v2.1.config.json
+#   tm-lb-all-v2.2.config.json
 #
 # Luxembourgish model specification for v2.2:
 #   {
-#     "uposFilter": ["NOUN"],
+#     "uposFilter": ["NOUN","PROPN"],
 #     "topic_count": 100,
 #     "language": "lb",
 #     "model_id": "tm-lb-all-v2.2",
@@ -57,7 +57,7 @@ TOPIC_TRAIN_VOCAB_MAX_FREQ ?= 50000
 TOPIC_TRAIN_INCLUDE_VOCAB_DIR ?= resources/include-vocab
 TOPIC_TRAIN_EXCLUDE_VOCAB_DIR ?= resources/exclude-vocab
 # Optional reviewed diagnostics to apply in addition to resources/exclude-vocab/lb.txt.
-# TOPIC_TRAIN_ADDITIONAL_EXCLUDE_VOCAB_lb ?= s3://130-component-sandbox/topics-mallet/tm-lb-all-v2.2/diagnostics/tm-lb-all-v2.2-df-exclusion.docfreq-lte-2.txt
+TOPIC_TRAIN_ADDITIONAL_EXCLUDE_VOCAB_lb += resources/exclude-vocab/tm-lb-all-v2.2-df-exclusion.docfreq-lte-2.txt
 
 # Eligible-text and sampling defaults.
 TOPIC_TRAIN_MAX_TOKENS ?= 1000

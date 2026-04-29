@@ -93,8 +93,8 @@ $(BUILD_DIR)/$(TOPIC_TRAIN_BUCKET)/$(TOPIC_TRAIN_PREFIX)/$(TOPIC_TRAIN_RUN_ID)/
 The expected artifact families include:
 
 - `vocab/{lang}.vocab.tsv.bz2`
-- `eligible/{lang}/{newspaper}.eligible.tsv.bz2`
-- `sample/{lang}/sample.tsv.bz2`
+- `eligible/{newspaper}.eligible.tsv.bz2`
+- `sample/sample.tsv.bz2`
 - `mallet/{lang}.sample.mallet`
 - `models/{lang}.model`
 - `models/{lang}.inferencer`
