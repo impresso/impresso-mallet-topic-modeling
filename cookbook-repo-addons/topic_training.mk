@@ -75,6 +75,7 @@ MALLET_SMOKE_DOCS ?= 1000
 MALLET_SMOKE_INFER_ITERATIONS ?= 100
 MALLET_TOPIC_ASSIGNMENT_THRESHOLD ?= 0.02
 TOPIC_TRAIN_WORD_THRESHOLD ?= 200
+TOPIC_TRAIN_SINGLETON_DOC_FREQ_MAX ?= 1
 TOPIC_TRAIN_NEGATIVE_DOC_FREQ_MAX ?= 2
 TOPIC_TRAIN_FORCE_S3_OVERWRITE ?= FALSE
 
@@ -82,11 +83,11 @@ topic_train_vocab_s3 = $(S3_TOPIC_TRAIN_BASE_PATH)/vocab/$(1).vocab.tsv.bz2
 topic_train_vocab_meta_s3 = $(S3_TOPIC_TRAIN_BASE_PATH)/vocab/$(1).vocab.metadata.json
 topic_train_eligible_s3 = $(S3_TOPIC_TRAIN_BASE_PATH)/eligible/$(1).eligible.tsv.bz2
 topic_train_eligible_stats_s3 = $(S3_TOPIC_TRAIN_BASE_PATH)/eligible/$(1).stats.json
-topic_train_singleton_lemmas_s3 = $(S3_TOPIC_TRAIN_BASE_PATH)/diagnostics/$(TOPIC_TRAIN_MODEL_ID)-df-singletons.tsv.bz2
-topic_train_singleton_lemmas_meta_s3 = $(S3_TOPIC_TRAIN_BASE_PATH)/diagnostics/$(TOPIC_TRAIN_MODEL_ID)-df-singletons.metadata.json
+topic_train_singleton_lemmas_s3 = $(S3_TOPIC_TRAIN_BASE_PATH)/diagnostics/$(TOPIC_TRAIN_MODEL_ID)-df-singletons.docfreq-lte-$(TOPIC_TRAIN_SINGLETON_DOC_FREQ_MAX).tsv.bz2
+topic_train_singleton_lemmas_meta_s3 = $(S3_TOPIC_TRAIN_BASE_PATH)/diagnostics/$(TOPIC_TRAIN_MODEL_ID)-df-singletons.docfreq-lte-$(TOPIC_TRAIN_SINGLETON_DOC_FREQ_MAX).metadata.json
 topic_train_rare_docfreq_negative_lemmas_s3 = $(S3_TOPIC_TRAIN_BASE_PATH)/diagnostics/$(TOPIC_TRAIN_MODEL_ID)-df-exclusion.docfreq-lte-$(TOPIC_TRAIN_NEGATIVE_DOC_FREQ_MAX).tsv.bz2
 topic_train_rare_docfreq_negative_lemmas_meta_s3 = $(S3_TOPIC_TRAIN_BASE_PATH)/diagnostics/$(TOPIC_TRAIN_MODEL_ID)-df-exclusion.docfreq-lte-$(TOPIC_TRAIN_NEGATIVE_DOC_FREQ_MAX).metadata.json
-topic_train_singleton_lemmas_word_s3 = $(S3_TOPIC_TRAIN_BASE_PATH)/diagnostics/$(TOPIC_TRAIN_MODEL_ID)-df-singletons.txt
+topic_train_singleton_lemmas_word_s3 = $(S3_TOPIC_TRAIN_BASE_PATH)/diagnostics/$(TOPIC_TRAIN_MODEL_ID)-df-singletons.docfreq-lte-$(TOPIC_TRAIN_SINGLETON_DOC_FREQ_MAX).txt
 topic_train_rare_docfreq_negative_lemmas_word_s3 = $(S3_TOPIC_TRAIN_BASE_PATH)/diagnostics/$(TOPIC_TRAIN_MODEL_ID)-df-exclusion.docfreq-lte-$(TOPIC_TRAIN_NEGATIVE_DOC_FREQ_MAX).txt
 topic_train_additional_exclude_vocab = $(strip $(TOPIC_TRAIN_ADDITIONAL_EXCLUDE_VOCAB) $(value TOPIC_TRAIN_ADDITIONAL_EXCLUDE_VOCAB_$(1)))
 topic_train_exclude_vocab_args = $(foreach file,$(wildcard $(TOPIC_TRAIN_EXCLUDE_VOCAB_DIR)/$(1).txt) $(call topic_train_additional_exclude_vocab,$(1)),--exclude-vocab $(file))
@@ -147,6 +148,7 @@ help-topic-training:
 	@echo "  make topic-training-eligible-LANG COLLECTION_JOBS=4 MAX_LOAD=8"
 	@echo "  make topic-training-eligible-LANG TOPIC_TRAIN_FORCE_S3_OVERWRITE=TRUE"
 	@echo "  make topic-training-singleton-lemmas-LANG"
+	@echo "  make topic-training-singleton-lemmas-LANG TOPIC_TRAIN_SINGLETON_DOC_FREQ_MAX=2"
 	@echo "  make topic-training-rare-docfreq-negative-lemmas-LANG"
 	@echo "  make topic-training-vocab-LANG TOPIC_TRAIN_ADDITIONAL_EXCLUDE_VOCAB_LANG=s3://..."
 	@echo "  make topic-training-sample-LANG"
@@ -250,7 +252,7 @@ topic-training-singleton-lemmas-%: FORCE
 	$(PYTHON) lib/analyze_doc_freq.py \
 		--s3-prefix $(S3_TOPIC_TRAIN_BASE_PATH)/eligible/ \
 		--input-suffix .eligible.tsv.bz2 \
-		--max-document-frequency 1 \
+		--max-document-frequency $(TOPIC_TRAIN_SINGLETON_DOC_FREQ_MAX) \
 		--output $(call topic_train_singleton_lemmas_s3,$*) \
 		--word-output $(call topic_train_singleton_lemmas_word_s3,$*) \
 		--metadata-output $(call topic_train_singleton_lemmas_meta_s3,$*) \
