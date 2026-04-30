@@ -22,7 +22,7 @@ SHELL ?= /bin/bash
 
 # Input linguistic-processing and lemma-frequency run.
 S3_BUCKET_LINGPROC_COMPONENT ?= 130-component-sandbox
-RUN_ID_LINGPROC ?= lingproc-spacy_v3.6.0-multilingual_v1-0-3
+RUN_ID_LINGPROC ?= lingproc-pos-spacy_v3.6.0-multilingual_v1-0-3
 TOPIC_TRAIN_LEMMAFREQ_SELECTION_LABEL ?= upos-PROPN_NOUN.minlength-2
 
 # Source lingproc content-item files used for eligible text extraction.
