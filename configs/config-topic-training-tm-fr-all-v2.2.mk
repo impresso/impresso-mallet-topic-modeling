@@ -57,6 +57,8 @@ TOPIC_TRAIN_VOCAB_MAX_FREQ ?= 50000
 TOPIC_TRAIN_INCLUDE_VOCAB_DIR ?= resources/include-vocab
 TOPIC_TRAIN_EXCLUDE_VOCAB_DIR ?= resources/exclude-vocab
 TOPIC_TRAIN_ADDITIONAL_EXCLUDE_VOCAB_fr += resources/exclude-vocab/tm-fr-all-v2.2-df-exclusion.docfreq-lte-3.txt
+TOPIC_TRAIN_ADDITIONAL_EXCLUDE_VOCAB_fr += resources/exclude-vocab/tm-fr-all-v2.2-all-non-words.txt
+
 # Eligible-text and sampling defaults.
 TOPIC_TRAIN_MAX_TOKENS ?= 1500
 TOPIC_TRAIN_INCLUDE_TITLES ?= true
