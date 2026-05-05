@@ -76,6 +76,7 @@ MALLET_RANDOM_SEED ?= 42
 MALLET_SMOKE_DOCS ?= 1000
 MALLET_SMOKE_INFER_ITERATIONS ?= 100
 MALLET_TOPIC_ASSIGNMENT_THRESHOLD ?= 0.02
+TOPIC_TRAIN_SMOKE_VERBOSE ?= true
 TOPIC_TRAIN_WORD_THRESHOLD ?= 200
 # Upper bound on document frequency for rare-lemma diagnostics.
 # Lemmas appearing in *at most* this many documents are reported as singletons/rare.
@@ -347,12 +348,16 @@ topic-training-sample-%: FORCE
 
 topic-training-import-%: FORCE
 	@mkdir -p $(LOCAL_TOPIC_TRAIN_BASE_PATH)/sample $(LOCAL_TOPIC_TRAIN_BASE_PATH)/mallet
-	$(PYTHON) lib/copy_uri.py --force-s3-overwrite $(TOPIC_TRAIN_FORCE_S3_OVERWRITE) $(call topic_train_sample_s3,$*) $(call topic_train_sample_local,$*)
-	MEMORY=$(MALLET_STD_MEMORY) $(MALLET) import-file \
-		--input $(call topic_train_sample_local,$*) \
-		--output $(call topic_train_sample_mallet_local,$*) \
-		--keep-sequence
-	$(PYTHON) lib/copy_uri.py --force-s3-overwrite $(TOPIC_TRAIN_FORCE_S3_OVERWRITE) $(call topic_train_sample_mallet_local,$*) $(call topic_train_sample_mallet_s3,$*)
+	@if [ -s "$(call topic_train_sample_mallet_local,$*)" ]; then \
+		echo "Using existing local MALLET sample: $(call topic_train_sample_mallet_local,$*)"; \
+	else \
+		$(PYTHON) lib/copy_uri.py --force-s3-overwrite $(TOPIC_TRAIN_FORCE_S3_OVERWRITE) $(call topic_train_sample_s3,$*) $(call topic_train_sample_local,$*) && \
+		MEMORY=$(MALLET_STD_MEMORY) $(MALLET) import-file \
+			--input $(call topic_train_sample_local,$*) \
+			--output $(call topic_train_sample_mallet_local,$*) \
+			--keep-sequence; \
+	fi
+	$(PYTHON) lib/copy_uri.py --skip-existing --force-s3-overwrite $(TOPIC_TRAIN_FORCE_S3_OVERWRITE) $(call topic_train_sample_mallet_local,$*) $(call topic_train_sample_mallet_s3,$*)
 
 topic-training-train-%: topic-training-import-% FORCE
 	@mkdir -p $(LOCAL_TOPIC_TRAIN_BASE_PATH)/models $(LOCAL_TOPIC_TRAIN_BASE_PATH)/metadata
@@ -409,6 +414,7 @@ topic-training-smoke-infer-%: FORCE
 		-L $* \
 		-M tm-$*-$(TOPIC_TRAIN_RUN_ID) \
 		-T $(MALLET_TOPIC_ASSIGNMENT_THRESHOLD) \
+		$(if $(filter true,$(TOPIC_TRAIN_SMOKE_VERBOSE)),--text-tsv $(call topic_train_smoke_sample_local,$*) --topic-keys $(call topic_train_topickeys_local,$*) --topic-key-word-count 4,) \
 		$(call topic_train_smoke_doctopics_local,$*) > $(call topic_train_smoke_assignment_plain_local,$*)
 	bzip2 -f $(call topic_train_smoke_assignment_plain_local,$*)
 	$(PYTHON) lib/copy_uri.py --force-s3-overwrite $(TOPIC_TRAIN_FORCE_S3_OVERWRITE) $(call topic_train_smoke_assignment_local,$*) $(call topic_train_smoke_assignment_s3,$*)

@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """
 Normalize unnormalized lemma counts using a character normalization table.
+After character normalization, boundary punctuation is stripped and internal
+apostrophes/hyphens are deleted before validating the final core as ASCII
+letters only.
 
 Input frequency JSON:
 {
@@ -86,7 +89,7 @@ def add_local_force_s3_overwrite_argument(parser: argparse.ArgumentParser) -> No
     )
 
 
-VALID_CORE_RE = re.compile(r"^[a-z]+(?:-[a-z]+)*$")
+VALID_CORE_RE = re.compile(r"^[a-z]+$")
 DEFAULT_BOUNDARY_CHARS = (
     " \t\n\r"
     ".,;:!?()[]{}"
@@ -191,7 +194,9 @@ class LemmaNormalizer:
         candidate = base.strip(self.boundary_chars)
         if not candidate:
             return None
-        if "--" in candidate:
+        candidate = candidate.replace("-", "")
+        candidate = candidate.replace("'", "")
+        if not candidate:
             return None
         if VALID_CORE_RE.fullmatch(candidate) is None:
             return None
@@ -321,8 +326,6 @@ def main() -> None:
             "min_alpha_ratio": args.min_alpha_ratio,
             "allowed_core_pattern": VALID_CORE_RE.pattern,
             "digits": "rejected",
-            "internal_apostrophe": "rejected",
-            "internal_hyphen": "allowed",
         },
         **result,
     }
