@@ -85,6 +85,11 @@ def main() -> int:
         description="Trim an aggregated lemmafreq JSON file into a topic vocabulary."
     )
     parser.add_argument("--lemmafreq", required=True, help="Aggregated lemmafreq JSON.bz2")
+    parser.add_argument(
+        "--freqs-key",
+        default="freqs",
+        help="JSON object key containing lemma frequencies (default: %(default)s)",
+    )
     parser.add_argument("--language", required=True, help="Language code")
     parser.add_argument("--min-frequency", type=int, required=True)
     parser.add_argument("--max-frequency", type=int, required=True)
@@ -134,9 +139,12 @@ def main() -> int:
     with smart_open(args.lemmafreq, "r", encoding="utf-8", transport_params=get_transport_params(args.lemmafreq)) as handle:
         data = json.load(handle)
 
-    freqs = data.get("freqs")
+    freqs = data.get(args.freqs_key)
     if not isinstance(freqs, dict):
-        print("lemmafreq file does not contain a freqs object", file=sys.stderr)
+        print(
+            f"lemmafreq file does not contain a {args.freqs_key!r} object",
+            file=sys.stderr,
+        )
         return 2
 
     rows = sorted(
@@ -159,7 +167,10 @@ def main() -> int:
         "language": args.language,
         "source_lemmafreq": args.lemmafreq,
         "source_lemmafreq_sha256": sha256_path(args.lemmafreq),
-        "source_metadata": {k: v for k, v in data.items() if k != "freqs"},
+        "source_freqs_key": args.freqs_key,
+        "source_metadata": {
+            k: v for k, v in data.items() if k not in {"freqs", "normalized_freqs"}
+        },
         "criteria": {
             "min_frequency": args.min_frequency,
             "max_frequency": args.max_frequency,

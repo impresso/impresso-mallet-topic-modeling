@@ -23,6 +23,7 @@ from impresso_cookbook import (  # type: ignore
     setup_logging,
     get_transport_params,
 )
+from normalize_lemma_vocabulary import LemmaNormalizer, load_translation_table
 
 log = logging.getLogger(__name__)
 
@@ -105,6 +106,7 @@ def extract_doc_lemmas(
     min_lemma_length: int,
     vocab: set[str],
     include_titles: bool,
+    normalizer: LemmaNormalizer | None = None,
 ) -> list[str]:
     lemmas: list[str] = []
     for sent in iter_sentences(doc, include_titles):
@@ -118,6 +120,11 @@ def extract_doc_lemmas(
             if not lemma_raw.strip():
                 lemma_raw = token.get("t") or ""
             lemma = lemma_raw.strip().lower()
+            if normalizer is not None:
+                normalized = normalizer.normalize(lemma)
+                if normalized is None:
+                    continue
+                lemma = normalized
             if len(lemma) < min_lemma_length:
                 continue
             if lemma not in vocab:
@@ -139,6 +146,10 @@ def main() -> int:
     )
     parser.add_argument("--input-suffix", default=".jsonl.bz2")
     parser.add_argument("--vocab", required=True)
+    parser.add_argument(
+        "--char-normalization",
+        help="Optional character normalization JSON used to normalize document lemmas.",
+    )
     parser.add_argument("--language", required=True)
     parser.add_argument("--pos-tags", default="PROPN,NOUN")
     parser.add_argument("--min-lemma-length", type=int, default=2)
@@ -181,6 +192,13 @@ def main() -> int:
     log.info(f"Processing {len(inputs)} input file(s)")
 
     vocab = load_vocab(args.vocab)
+    normalizer = None
+    if args.char_normalization:
+        translation_table = load_translation_table(args.char_normalization)
+        normalizer = LemmaNormalizer(
+            translation_table=translation_table,
+            min_alpha=args.min_lemma_length,
+        )
     pos_tags = {tag.strip() for tag in args.pos_tags.split(",") if tag.strip()}
     log.info(f"Filtering for POS tags: {sorted(pos_tags)}")
     log.info(f"Language: {args.language}")
@@ -218,6 +236,7 @@ def main() -> int:
                         min_lemma_length=args.min_lemma_length,
                         vocab=vocab,
                         include_titles=args.include_titles,
+                        normalizer=normalizer,
                     )
                     stats["docs_seen"] += 1
                     stats["accepted_vocab_tokens"] += len(lemmas)

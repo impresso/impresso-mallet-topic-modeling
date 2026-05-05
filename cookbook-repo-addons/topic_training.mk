@@ -46,6 +46,8 @@ TOPIC_TRAIN_POS_TAGS ?= PROPN,NOUN
 TOPIC_TRAIN_MIN_LEMMA_LENGTH ?= 3
 TOPIC_TRAIN_VOCAB_MIN_FREQ ?= 400
 TOPIC_TRAIN_VOCAB_MAX_FREQ ?= 2000000
+TOPIC_TRAIN_NORMALIZED_MIN_ALPHA ?= 3
+TOPIC_TRAIN_NORMALIZED_MIN_ALPHA_RATIO ?= 0.75
 TOPIC_TRAIN_INCLUDE_VOCAB_DIR ?= resources/include-vocab
 TOPIC_TRAIN_EXCLUDE_VOCAB_DIR ?= resources/exclude-vocab
 TOPIC_TRAIN_ADDITIONAL_EXCLUDE_VOCAB ?=
@@ -79,6 +81,11 @@ TOPIC_TRAIN_SINGLETON_DOC_FREQ_MAX ?= 1
 TOPIC_TRAIN_NEGATIVE_DOC_FREQ_MAX ?= 2
 TOPIC_TRAIN_FORCE_S3_OVERWRITE ?= FALSE
 
+topic_train_pre_norm_vocab_s3 = $(S3_TOPIC_TRAIN_BASE_PATH)/vocab/$(1).pre-norm.vocab.tsv.bz2
+topic_train_pre_norm_vocab_meta_s3 = $(S3_TOPIC_TRAIN_BASE_PATH)/vocab/$(1).pre-norm.vocab.metadata.json
+topic_train_char_normalization_s3 = $(S3_TOPIC_TRAIN_BASE_PATH)/vocab/$(1).char-normalization.json
+topic_train_char_normalization_report_s3 = $(S3_TOPIC_TRAIN_BASE_PATH)/vocab/$(1).char-normalization.report.json
+topic_train_normalized_lemma_vocab_s3 = $(S3_TOPIC_TRAIN_BASE_PATH)/vocab/$(1).normalized-lemma-vocab.json.bz2
 topic_train_vocab_s3 = $(S3_TOPIC_TRAIN_BASE_PATH)/vocab/$(1).vocab.tsv.bz2
 topic_train_vocab_meta_s3 = $(S3_TOPIC_TRAIN_BASE_PATH)/vocab/$(1).vocab.metadata.json
 topic_train_eligible_s3 = $(S3_TOPIC_TRAIN_BASE_PATH)/eligible/$(1).eligible.tsv.bz2
@@ -142,22 +149,26 @@ FORCE:
 help-topic-training:
 	@echo "Topic training targets:"
 	@echo "  make topic-training-setup"
-	@echo "  make topic-training-vocab-LANG"
-	@echo "  make topic-training-eligible-newspaper LANG=de NEWSPAPER=BL/AATA"
-	@echo "  make topic-training-eligible-LANG"
-	@echo "  make topic-training-eligible-LANG COLLECTION_JOBS=4 MAX_LOAD=8"
-	@echo "  make topic-training-eligible-LANG TOPIC_TRAIN_FORCE_S3_OVERWRITE=TRUE"
-	@echo "  make topic-training-singleton-lemmas-LANG"
-	@echo "  make topic-training-singleton-lemmas-LANG TOPIC_TRAIN_SINGLETON_DOC_FREQ_MAX=2"
-	@echo "  make topic-training-rare-docfreq-negative-lemmas-LANG"
-	@echo "  make topic-training-vocab-LANG TOPIC_TRAIN_ADDITIONAL_EXCLUDE_VOCAB_LANG=s3://..."
-	@echo "  make topic-training-sample-LANG"
-	@echo "  make topic-training-import-LANG"
-	@echo "  make topic-training-train-LANG"
-	@echo "  make topic-training-describe-LANG"
-	@echo "  make topic-training-smoke-infer-LANG"
-	@echo "  make topic-training-publish-LANG"
-	@echo "  make topic-training-all-LANG"
+	@echo "  make topic-training-pre-norm-vocab-<lang>"
+	@echo "  make topic-training-char-normalization-<lang>"
+	@echo "  make topic-training-normalized-lemma-vocab-<lang>"
+	@echo "  make topic-training-vocab-<lang>"
+	@echo "  make topic-training-vocabs"
+	@echo "  make topic-training-eligible-newspaper LNG=de NEWSPAPER=BL/AATA"
+	@echo "  make topic-training-eligible-<lang>"
+	@echo "  make topic-training-eligible-<lang> COLLECTION_JOBS=4 MAX_LOAD=8"
+	@echo "  make topic-training-eligible-<lang> TOPIC_TRAIN_FORCE_S3_OVERWRITE=TRUE"
+	@echo "  make topic-training-singleton-lemmas-<lang>"
+	@echo "  make topic-training-singleton-lemmas-<lang> TOPIC_TRAIN_SINGLETON_DOC_FREQ_MAX=2"
+	@echo "  make topic-training-rare-docfreq-negative-lemmas-<lang>"
+	@echo "  make topic-training-vocab-<lang> TOPIC_TRAIN_ADDITIONAL_EXCLUDE_VOCAB_<lang>=s3://..."
+	@echo "  make topic-training-sample-<lang>"
+	@echo "  make topic-training-import-<lang>"
+	@echo "  make topic-training-train-<lang>"
+	@echo "  make topic-training-describe-<lang>"
+	@echo "  make topic-training-smoke-infer-<lang>"
+	@echo "  make topic-training-publish-<lang>"
+	@echo "  make topic-training-all-<lang>"
 	@echo "  make check-topic-training-mallet"
 	@echo "S3 base: $(S3_TOPIC_TRAIN_BASE_PATH)"
 	@echo "Final base: $(S3_TOPIC_TRAIN_FINAL_BASE_PATH)"
@@ -201,10 +212,45 @@ check-topic-training-mallet:
 	test $$status -eq 0 || test $$status -eq 255 || \
 	{ echo "MALLET train-topics smoke check failed with exit $$status"; exit $$status; }
 
-topic-training-vocab-%: FORCE
+topic-training-pre-norm-vocab-%: FORCE
 	@mkdir -p $(LOCAL_TOPIC_TRAIN_BASE_PATH)/logs
 	$(PYTHON) lib/topic_vocab.py \
 		--lemmafreq $(call topic_train_lemmafreq_s3,$*) \
+		--language $* \
+		--min-frequency $(TOPIC_TRAIN_VOCAB_MIN_FREQ) \
+		--max-frequency $(TOPIC_TRAIN_VOCAB_MAX_FREQ) \
+		--min-length $(TOPIC_TRAIN_MIN_LEMMA_LENGTH) \
+		$(if $(wildcard $(TOPIC_TRAIN_INCLUDE_VOCAB_DIR)/$*.txt),--include-vocab $(TOPIC_TRAIN_INCLUDE_VOCAB_DIR)/$*.txt,) \
+		$(call topic_train_exclude_vocab_args,$*) \
+		--output $(call topic_train_pre_norm_vocab_s3,$*) \
+		--metadata-output $(call topic_train_pre_norm_vocab_meta_s3,$*) \
+		--run-id $(TOPIC_TRAIN_RUN_ID) \
+		--force-s3-overwrite $(TOPIC_TRAIN_FORCE_S3_OVERWRITE)
+
+topic-training-char-normalization-%: FORCE
+	$(PYTHON) lib/build_char_normalization_table.py \
+		$(call topic_train_lemmafreq_s3,$*) \
+		$(call topic_train_char_normalization_s3,$*) \
+		--report-json $(call topic_train_char_normalization_report_s3,$*) \
+		--force-s3-overwrite $(TOPIC_TRAIN_FORCE_S3_OVERWRITE)
+
+topic-training-normalized-lemma-vocab-%: FORCE
+	$(MAKE) topic-training-char-normalization-$*
+	$(PYTHON) lib/normalize_lemma_vocabulary.py \
+		$(call topic_train_lemmafreq_s3,$*) \
+		$(call topic_train_char_normalization_s3,$*) \
+		$(call topic_train_normalized_lemma_vocab_s3,$*) \
+		--min-alpha $(TOPIC_TRAIN_NORMALIZED_MIN_ALPHA) \
+		--min-alpha-ratio $(TOPIC_TRAIN_NORMALIZED_MIN_ALPHA_RATIO) \
+		--force-s3-overwrite $(TOPIC_TRAIN_FORCE_S3_OVERWRITE)
+
+topic-training-vocab-%: FORCE
+	@mkdir -p $(LOCAL_TOPIC_TRAIN_BASE_PATH)/logs
+	$(MAKE) topic-training-pre-norm-vocab-$*
+	$(MAKE) topic-training-normalized-lemma-vocab-$*
+	$(PYTHON) lib/topic_vocab.py \
+		--lemmafreq $(call topic_train_normalized_lemma_vocab_s3,$*) \
+		--freqs-key normalized_freqs \
 		--language $* \
 		--min-frequency $(TOPIC_TRAIN_VOCAB_MIN_FREQ) \
 		--max-frequency $(TOPIC_TRAIN_VOCAB_MAX_FREQ) \
@@ -216,21 +262,27 @@ topic-training-vocab-%: FORCE
 		--run-id $(TOPIC_TRAIN_RUN_ID) \
 		--force-s3-overwrite $(TOPIC_TRAIN_FORCE_S3_OVERWRITE)
 
+topic-training-pre-norm-vocabs: $(foreach lang,$(TOPIC_TRAIN_LANGS),topic-training-pre-norm-vocab-$(lang))
+topic-training-char-normalizations: $(foreach lang,$(TOPIC_TRAIN_LANGS),topic-training-char-normalization-$(lang))
+topic-training-normalized-lemma-vocabs: $(foreach lang,$(TOPIC_TRAIN_LANGS),topic-training-normalized-lemma-vocab-$(lang))
+topic-training-vocabs: $(foreach lang,$(TOPIC_TRAIN_LANGS),topic-training-vocab-$(lang))
+
 .PHONY: topic-training-eligible-newspaper
 topic-training-eligible-newspaper:
-	@test -n "$(LANG)" || (echo "LANG is required"; exit 2)
+	@test -n "$(LNG)" || (echo "LNG is required"; exit 2)
 	@test -n "$(NEWSPAPER)" || (echo "NEWSPAPER is required"; exit 2)
 	$(PYTHON) lib/extract_eligible_texts.py \
 		--s3-prefix $(TOPIC_TRAIN_LINGPROC_S3_PREFIX)/$(NEWSPAPER) \
 		--input-suffix $(TOPIC_TRAIN_INPUT_SUFFIX) \
-		--vocab $(call topic_train_vocab_s3,$(LANG)) \
-		--language $(LANG) \
+		--vocab $(call topic_train_vocab_s3,$(LNG)) \
+		--char-normalization $(call topic_train_char_normalization_s3,$(LNG)) \
+		--language $(LNG) \
 		--pos-tags $(TOPIC_TRAIN_POS_TAGS) \
 		--min-lemma-length $(TOPIC_TRAIN_MIN_LEMMA_LENGTH) \
 		--min-vocab-tokens $(TOPIC_TRAIN_MIN_VOCAB_TOKENS) \
 		--min-unique-lemmas $(TOPIC_TRAIN_MIN_UNIQUE_LEMMAS) \
 		--max-tokens $(TOPIC_TRAIN_MAX_TOKENS) \
-		$(if $(filter true,$(TOPIC_TRAIN_INCLUDE_TITLES)),--include-titles,) \
+		$(if $(filter true,$(TOPIC_TRAIN_INCLUDE_TITLES)),--include-titles,--no-include-titles) \
 		--output $(call topic_train_eligible_s3,$(NEWSPAPER)) \
 		--stats-output $(call topic_train_eligible_stats_s3,$(NEWSPAPER)) \
 		--run-id $(TOPIC_TRAIN_RUN_ID) \
@@ -246,7 +298,7 @@ topic-training-eligible-%: FORCE
 		parallel --halt soon,fail=1 --line-buffer \
 			--jobs $(COLLECTION_JOBS) \
 			--load $(MAX_LOAD) \
-			$(MAKE) topic-training-eligible-newspaper LANG=$* NEWSPAPER={}
+			$(MAKE) topic-training-eligible-newspaper LNG=$* NEWSPAPER={}
 
 topic-training-singleton-lemmas-%: FORCE
 	$(PYTHON) lib/analyze_doc_freq.py \

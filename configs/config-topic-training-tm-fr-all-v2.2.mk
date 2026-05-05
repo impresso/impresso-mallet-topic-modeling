@@ -60,7 +60,7 @@ TOPIC_TRAIN_ADDITIONAL_EXCLUDE_VOCAB_fr += resources/exclude-vocab/tm-fr-all-v2.
 TOPIC_TRAIN_ADDITIONAL_EXCLUDE_VOCAB_fr += resources/exclude-vocab/tm-fr-all-v2.2-all-non-words.txt
 
 # Eligible-text and sampling defaults.
-TOPIC_TRAIN_MAX_TOKENS ?= 1500
+TOPIC_TRAIN_MAX_TOKENS ?= 4500
 TOPIC_TRAIN_INCLUDE_TITLES ?= true
 TOPIC_TRAIN_SAMPLE_SIZE ?= 1000000
 TOPIC_TRAIN_SAMPLE_SEED ?= 42
