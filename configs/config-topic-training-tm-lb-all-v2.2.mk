@@ -53,14 +53,15 @@ TOPIC_TRAIN_LOWERCASE_TOKEN ?= true
 
 # Vocabulary trimming. Adjust these after inspecting Luxembourgish lemmafreq coverage.
 TOPIC_TRAIN_VOCAB_MIN_FREQ ?= 9
-TOPIC_TRAIN_VOCAB_MAX_FREQ ?= 50000
+TOPIC_TRAIN_VOCAB_MAX_FREQ ?= 500000
 TOPIC_TRAIN_INCLUDE_VOCAB_DIR ?= resources/include-vocab
 TOPIC_TRAIN_EXCLUDE_VOCAB_DIR ?= resources/exclude-vocab
+TOPIC_TRAIN_NEGATIVE_DOC_FREQ_MAX ?= 4
 # Optional reviewed diagnostics to apply in addition to resources/exclude-vocab/lb.txt.
-TOPIC_TRAIN_ADDITIONAL_EXCLUDE_VOCAB_lb += resources/exclude-vocab/tm-lb-all-v2.2-df-exclusion.docfreq-lte-2.txt
+TOPIC_TRAIN_ADDITIONAL_EXCLUDE_VOCAB_lb += resources/exclude-vocab/tm-lb-all-v2.2-df-exclusion.docfreq-lte-$(TOPIC_TRAIN_NEGATIVE_DOC_FREQ_MAX).txt
 
 # Eligible-text and sampling defaults.
-TOPIC_TRAIN_MAX_TOKENS ?= 1000
+TOPIC_TRAIN_MAX_TOKENS ?= 100000
 TOPIC_TRAIN_INCLUDE_TITLES ?= true
 TOPIC_TRAIN_SAMPLE_SIZE ?= 1000000
 TOPIC_TRAIN_SAMPLE_SEED ?= 42
@@ -83,5 +84,4 @@ MALLET_SMOKE_DOCS ?= 1000
 MALLET_SMOKE_INFER_ITERATIONS ?= 100
 MALLET_TOPIC_ASSIGNMENT_THRESHOLD ?= 0.02
 TOPIC_TRAIN_WORD_THRESHOLD ?= 200
-TOPIC_TRAIN_SINGLETON_DOC_FREQ_MAX ?= 1
-TOPIC_TRAIN_NEGATIVE_DOC_FREQ_MAX ?= 2
+TOPIC_TRAIN_SINGLETON_DOC_FREQ_MAX ?= 4

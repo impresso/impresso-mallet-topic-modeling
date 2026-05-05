@@ -129,6 +129,31 @@ def write_words(path: str, rows: Iterable[tuple[str, int, int, str]]) -> None:
             out.write(f"{lemma}\n")
 
 
+def write_word_diagnostics(
+    path: str,
+    rows: Iterable[tuple[str, int, int, str]],
+    *,
+    source_word_output: str | None,
+) -> None:
+    excluded_lemmas = [
+        {
+            "lemma": lemma,
+            "document_frequency": document_frequency,
+            "total_frequency": total_frequency,
+            "document_ids": [doc_id for doc_id in doc_ids.split(",") if doc_id],
+        }
+        for lemma, document_frequency, total_frequency, doc_ids in rows
+    ]
+    diagnostics = {
+        "created_at": get_timestamp(),
+        "source_word_output": source_word_output,
+        "excluded_lemmas": excluded_lemmas,
+    }
+    with smart_open(path, "w", encoding="utf-8", transport_params=get_transport_params(path)) as out:
+        json.dump(diagnostics, out, ensure_ascii=False, indent=2, sort_keys=True)
+        out.write("\n")
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(
         description=(
@@ -158,6 +183,13 @@ def main() -> int:
     parser.add_argument(
         "--word-output",
         help="Optional one-lemma-per-line output for use as a negative lemma list.",
+    )
+    parser.add_argument(
+        "--word-diagnostics-output",
+        help=(
+            "Optional JSON diagnostics for --word-output with document and total "
+            "frequency per excluded lemma."
+        ),
     )
     parser.add_argument(
         "--metadata-output",
@@ -192,6 +224,10 @@ def main() -> int:
 
     assert_can_write_uri(args.output, force_s3_overwrite=args.force_s3_overwrite)
     assert_can_write_uri(args.word_output, force_s3_overwrite=args.force_s3_overwrite)
+    assert_can_write_uri(
+        args.word_diagnostics_output,
+        force_s3_overwrite=args.force_s3_overwrite,
+    )
     assert_can_write_uri(
         args.metadata_output, force_s3_overwrite=args.force_s3_overwrite
     )
@@ -230,6 +266,12 @@ def main() -> int:
     write_rows(args.output, rows, header=not args.no_header)
     if args.word_output:
         write_words(args.word_output, rows)
+    if args.word_diagnostics_output:
+        write_word_diagnostics(
+            args.word_diagnostics_output,
+            rows,
+            source_word_output=args.word_output,
+        )
 
     if args.metadata_output:
         metadata = {

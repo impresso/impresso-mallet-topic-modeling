@@ -77,7 +77,10 @@ MALLET_SMOKE_DOCS ?= 1000
 MALLET_SMOKE_INFER_ITERATIONS ?= 100
 MALLET_TOPIC_ASSIGNMENT_THRESHOLD ?= 0.02
 TOPIC_TRAIN_WORD_THRESHOLD ?= 200
-TOPIC_TRAIN_SINGLETON_DOC_FREQ_MAX ?= 1
+# Upper bound on document frequency for rare-lemma diagnostics.
+# Lemmas appearing in *at most* this many documents are reported as singletons/rare.
+# Used as --max-document-frequency in analyze_doc_freq.py (not a minimum threshold).
+TOPIC_TRAIN_SINGLETON_DOC_FREQ_MAX ?= 4
 TOPIC_TRAIN_NEGATIVE_DOC_FREQ_MAX ?= 2
 TOPIC_TRAIN_FORCE_S3_OVERWRITE ?= FALSE
 
@@ -96,7 +99,9 @@ topic_train_rare_docfreq_negative_lemmas_s3 = $(S3_TOPIC_TRAIN_BASE_PATH)/diagno
 topic_train_rare_docfreq_negative_lemmas_meta_s3 = $(S3_TOPIC_TRAIN_BASE_PATH)/diagnostics/$(TOPIC_TRAIN_MODEL_ID)-df-exclusion.docfreq-lte-$(TOPIC_TRAIN_NEGATIVE_DOC_FREQ_MAX).metadata.json
 topic_train_singleton_lemmas_word_s3 = $(S3_TOPIC_TRAIN_BASE_PATH)/diagnostics/$(TOPIC_TRAIN_MODEL_ID)-df-singletons.docfreq-lte-$(TOPIC_TRAIN_SINGLETON_DOC_FREQ_MAX).txt
 topic_train_rare_docfreq_negative_lemmas_word_s3 = $(S3_TOPIC_TRAIN_BASE_PATH)/diagnostics/$(TOPIC_TRAIN_MODEL_ID)-df-exclusion.docfreq-lte-$(TOPIC_TRAIN_NEGATIVE_DOC_FREQ_MAX).txt
-topic_train_additional_exclude_vocab = $(strip $(TOPIC_TRAIN_ADDITIONAL_EXCLUDE_VOCAB) $(value TOPIC_TRAIN_ADDITIONAL_EXCLUDE_VOCAB_$(1)))
+topic_train_singleton_lemmas_word_diagnostics_s3 = $(S3_TOPIC_TRAIN_BASE_PATH)/diagnostics/$(TOPIC_TRAIN_MODEL_ID)-df-singletons.docfreq-lte-$(TOPIC_TRAIN_SINGLETON_DOC_FREQ_MAX).txt.diagnostics.json
+topic_train_rare_docfreq_negative_lemmas_word_diagnostics_s3 = $(S3_TOPIC_TRAIN_BASE_PATH)/diagnostics/$(TOPIC_TRAIN_MODEL_ID)-df-exclusion.docfreq-lte-$(TOPIC_TRAIN_NEGATIVE_DOC_FREQ_MAX).txt.diagnostics.json
+topic_train_additional_exclude_vocab = $(strip $(TOPIC_TRAIN_ADDITIONAL_EXCLUDE_VOCAB) $(TOPIC_TRAIN_ADDITIONAL_EXCLUDE_VOCAB_$(1)))
 topic_train_exclude_vocab_args = $(foreach file,$(wildcard $(TOPIC_TRAIN_EXCLUDE_VOCAB_DIR)/$(1).txt) $(call topic_train_additional_exclude_vocab,$(1)),--exclude-vocab $(file))
 topic_train_sample_s3 = $(S3_TOPIC_TRAIN_BASE_PATH)/sample/sample.tsv.bz2
 topic_train_sample_manifest_s3 = $(S3_TOPIC_TRAIN_BASE_PATH)/sample/sample.manifest.json
@@ -162,6 +167,7 @@ help-topic-training:
 	@echo "  make topic-training-singleton-lemmas-<lang> TOPIC_TRAIN_SINGLETON_DOC_FREQ_MAX=2"
 	@echo "  make topic-training-rare-docfreq-negative-lemmas-<lang>"
 	@echo "  make topic-training-vocab-<lang> TOPIC_TRAIN_ADDITIONAL_EXCLUDE_VOCAB_<lang>=s3://..."
+	@echo "  make topic-training-prepare-<lang>  # vocab + eligible + diagnostics (review output, then rerun vocab with exclusions)"
 	@echo "  make topic-training-sample-<lang>"
 	@echo "  make topic-training-import-<lang>"
 	@echo "  make topic-training-train-<lang>"
@@ -307,6 +313,7 @@ topic-training-singleton-lemmas-%: FORCE
 		--max-document-frequency $(TOPIC_TRAIN_SINGLETON_DOC_FREQ_MAX) \
 		--output $(call topic_train_singleton_lemmas_s3,$*) \
 		--word-output $(call topic_train_singleton_lemmas_word_s3,$*) \
+		--word-diagnostics-output $(call topic_train_singleton_lemmas_word_diagnostics_s3,$*) \
 		--metadata-output $(call topic_train_singleton_lemmas_meta_s3,$*) \
 		--force-s3-overwrite $(TOPIC_TRAIN_FORCE_S3_OVERWRITE)
 	@echo "Review $(call topic_train_singleton_lemmas_word_s3,$*) and manually update $(TOPIC_TRAIN_EXCLUDE_VOCAB_DIR)/$*.txt if the lemmas should be excluded from future vocab builds."
@@ -318,6 +325,7 @@ topic-training-rare-docfreq-negative-lemmas-%: FORCE
 		--max-document-frequency $(TOPIC_TRAIN_NEGATIVE_DOC_FREQ_MAX) \
 		--output $(call topic_train_rare_docfreq_negative_lemmas_s3,$*) \
 		--word-output $(call topic_train_rare_docfreq_negative_lemmas_word_s3,$*) \
+		--word-diagnostics-output $(call topic_train_rare_docfreq_negative_lemmas_word_diagnostics_s3,$*) \
 		--metadata-output $(call topic_train_rare_docfreq_negative_lemmas_meta_s3,$*) \
 		--force-s3-overwrite $(TOPIC_TRAIN_FORCE_S3_OVERWRITE)
 	@echo "Review $(call topic_train_rare_docfreq_negative_lemmas_word_s3,$*) and manually update $(TOPIC_TRAIN_EXCLUDE_VOCAB_DIR)/$*.txt if the lemmas should be excluded from future vocab builds."
@@ -419,6 +427,17 @@ topic-training-publish-%: FORCE
 		$(call topic_train_description_s3,$*) $(call topic_train_final_description_s3,$*) \
 		$(call topic_train_smoke_assignment_s3,$*) $(call topic_train_final_smoke_assignment_s3,$*) \
 		$(call topic_train_metadata_s3,$*) $(call topic_train_final_metadata_s3,$*)
+
+# topic-training-prepare-% runs the full preparation pipeline up to and including diagnostic
+# analysis of rare lemmas. After this target completes, review the word lists produced by
+# topic-training-singleton-lemmas-% and topic-training-rare-docfreq-negative-lemmas-%, then
+# rerun  make topic-training-vocab-<lang> TOPIC_TRAIN_ADDITIONAL_EXCLUDE_VOCAB_<lang>=<path>
+# before proceeding to topic-training-sample-% / topic-training-all-%.
+topic-training-prepare-%: FORCE
+	$(MAKE) topic-training-vocab-$*
+	$(MAKE) topic-training-eligible-$*
+	$(MAKE) topic-training-singleton-lemmas-$*
+	$(MAKE) topic-training-rare-docfreq-negative-lemmas-$*
 
 topic-training-all-%: FORCE
 	$(MAKE) topic-training-vocab-$*

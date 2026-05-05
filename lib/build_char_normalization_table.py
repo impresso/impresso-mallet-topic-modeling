@@ -87,6 +87,15 @@ MANUAL_CHAR_MAP: dict[str, str | None] = {
     "Þ": "th",
     "ð": "d",
     "Ð": "d",
+    "ø": "o",
+    "ı": "i",
+    "ł": "l",
+    "ӧ": "o",
+    # Spacing diacritics should not introduce spaces inside tokens.
+    "¨": None,
+    "¯": None,
+    "¸": None,
+    "˜": None,
     # Apostrophe variants
     "’": "'",
     "‘": "'",
@@ -112,6 +121,8 @@ MANUAL_CHAR_MAP: dict[str, str | None] = {
     "‟": '"',
     "‹": "'",
     "›": "'",
+    # Decorative symbols
+    "™": None,
     # Explicitly remove replacement character if present
     "�": None,
 }
@@ -187,6 +198,9 @@ def build_table(
     table: dict[str, str | None] = {}
     for ch, count in sorted(char_freqs.items(), key=lambda x: (-x[1], x[0])):
         if count < min_count:
+            continue
+        if ch in MANUAL_CHAR_MAP:
+            table[ch] = MANUAL_CHAR_MAP[ch]
             continue
         replacement = ascii_fold_char(ch)
         if replacement is not None:
