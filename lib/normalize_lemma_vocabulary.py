@@ -2,7 +2,7 @@
 """
 Normalize unnormalized lemma counts using a character normalization table.
 After character normalization, boundary punctuation is stripped and internal
-apostrophes/hyphens are deleted before validating the final core as ASCII
+periods/apostrophes/hyphens are deleted before validating the final core as ASCII
 letters only.
 
 Input frequency JSON:
@@ -194,6 +194,7 @@ class LemmaNormalizer:
         candidate = base.strip(self.boundary_chars)
         if not candidate:
             return None
+        candidate = candidate.replace(".", "")
         candidate = candidate.replace("-", "")
         candidate = candidate.replace("'", "")
         if not candidate:
