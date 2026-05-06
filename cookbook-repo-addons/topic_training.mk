@@ -48,6 +48,7 @@ TOPIC_TRAIN_VOCAB_MIN_FREQ ?= 400
 TOPIC_TRAIN_VOCAB_MAX_FREQ ?= 2000000
 TOPIC_TRAIN_NORMALIZED_MIN_ALPHA ?= 3
 TOPIC_TRAIN_NORMALIZED_MIN_ALPHA_RATIO ?= 0.75
+TOPIC_TRAIN_NORMALIZED_PROGRESS_INTERVAL ?= 0
 TOPIC_TRAIN_INCLUDE_VOCAB_DIR ?= resources/include-vocab
 TOPIC_TRAIN_EXCLUDE_VOCAB_DIR ?= resources/exclude-vocab
 TOPIC_TRAIN_ADDITIONAL_EXCLUDE_VOCAB ?=
@@ -249,6 +250,7 @@ topic-training-normalized-lemma-vocab-%: FORCE
 		$(call topic_train_normalized_lemma_vocab_s3,$*) \
 		--min-alpha $(TOPIC_TRAIN_NORMALIZED_MIN_ALPHA) \
 		--min-alpha-ratio $(TOPIC_TRAIN_NORMALIZED_MIN_ALPHA_RATIO) \
+		--progress-interval $(TOPIC_TRAIN_NORMALIZED_PROGRESS_INTERVAL) \
 		--force-s3-overwrite $(TOPIC_TRAIN_FORCE_S3_OVERWRITE)
 
 topic-training-vocab-%: FORCE
