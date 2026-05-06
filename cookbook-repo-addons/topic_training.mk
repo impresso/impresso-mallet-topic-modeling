@@ -85,6 +85,7 @@ TOPIC_TRAIN_OUTPUT_DOC_TOPICS ?= true
 # Used as --max-document-frequency in analyze_doc_freq.py (not a minimum threshold).
 TOPIC_TRAIN_SINGLETON_DOC_FREQ_MAX ?= 4
 TOPIC_TRAIN_NEGATIVE_DOC_FREQ_MAX ?= 2
+TOPIC_TRAIN_DOC_FREQ_INCLUDE_DOCUMENT_IDS ?= false
 TOPIC_TRAIN_FORCE_S3_OVERWRITE ?= FALSE
 
 topic_train_pre_norm_vocab_s3 = $(S3_TOPIC_TRAIN_BASE_PATH)/vocab/$(1).pre-norm.vocab.tsv.bz2
@@ -315,6 +316,7 @@ topic-training-singleton-lemmas-%: FORCE
 		--s3-prefix $(S3_TOPIC_TRAIN_BASE_PATH)/eligible/ \
 		--input-suffix .eligible.tsv.bz2 \
 		--max-document-frequency $(TOPIC_TRAIN_SINGLETON_DOC_FREQ_MAX) \
+		$(if $(filter true,$(TOPIC_TRAIN_DOC_FREQ_INCLUDE_DOCUMENT_IDS)),--include-document-ids,) \
 		--output $(call topic_train_singleton_lemmas_s3,$*) \
 		--word-output $(call topic_train_singleton_lemmas_word_s3,$*) \
 		--word-diagnostics-output $(call topic_train_singleton_lemmas_word_diagnostics_s3,$*) \
@@ -327,6 +329,7 @@ topic-training-rare-docfreq-negative-lemmas-%: FORCE
 		--s3-prefix $(S3_TOPIC_TRAIN_BASE_PATH)/eligible/ \
 		--input-suffix .eligible.tsv.bz2 \
 		--max-document-frequency $(TOPIC_TRAIN_NEGATIVE_DOC_FREQ_MAX) \
+		$(if $(filter true,$(TOPIC_TRAIN_DOC_FREQ_INCLUDE_DOCUMENT_IDS)),--include-document-ids,) \
 		--output $(call topic_train_rare_docfreq_negative_lemmas_s3,$*) \
 		--word-output $(call topic_train_rare_docfreq_negative_lemmas_word_s3,$*) \
 		--word-diagnostics-output $(call topic_train_rare_docfreq_negative_lemmas_word_diagnostics_s3,$*) \

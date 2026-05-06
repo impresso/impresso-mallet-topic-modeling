@@ -98,26 +98,36 @@ def iter_eligible_rows(paths: Iterable[str]) -> Iterable[tuple[str, list[str]]]:
 
 def write_rows(
     path: str | None,
-    rows: Iterable[tuple[str, int, int, str]],
+    rows: Iterable[tuple[str, int, int, tuple[str, ...]]],
     *,
     header: bool,
+    include_document_ids: bool,
 ) -> None:
+    header_columns = "lemma\tdocument_frequency\ttotal_frequency"
+    if include_document_ids:
+        header_columns += "\tdocument_ids"
     if not path:
         out = sys.stdout
         if header:
-            out.write("lemma\tdocument_frequency\ttotal_frequency\tdocument_ids\n")
+            out.write(f"{header_columns}\n")
         for lemma, document_frequency, total_frequency, doc_ids in rows:
-            out.write(f"{lemma}\t{document_frequency}\t{total_frequency}\t{doc_ids}\n")
+            out.write(f"{lemma}\t{document_frequency}\t{total_frequency}")
+            if include_document_ids:
+                out.write(f"\t{','.join(doc_ids)}")
+            out.write("\n")
         return
 
     with smart_open(path, "w", encoding="utf-8", transport_params=get_transport_params(path)) as out:
         if header:
-            out.write("lemma\tdocument_frequency\ttotal_frequency\tdocument_ids\n")
+            out.write(f"{header_columns}\n")
         for lemma, document_frequency, total_frequency, doc_ids in rows:
-            out.write(f"{lemma}\t{document_frequency}\t{total_frequency}\t{doc_ids}\n")
+            out.write(f"{lemma}\t{document_frequency}\t{total_frequency}")
+            if include_document_ids:
+                out.write(f"\t{','.join(doc_ids)}")
+            out.write("\n")
 
 
-def write_words(path: str, rows: Iterable[tuple[str, int, int, str]]) -> None:
+def write_words(path: str, rows: Iterable[tuple[str, int, int, tuple[str, ...]]]) -> None:
     with smart_open(path, "w", encoding="utf-8", transport_params=get_transport_params(path)) as out:
         for lemma, _, _, _ in rows:
             out.write(f"{lemma}\n")
@@ -125,22 +135,25 @@ def write_words(path: str, rows: Iterable[tuple[str, int, int, str]]) -> None:
 
 def write_word_diagnostics(
     path: str,
-    rows: Iterable[tuple[str, int, int, str]],
+    rows: Iterable[tuple[str, int, int, tuple[str, ...]]],
     *,
     source_word_output: str | None,
+    include_document_ids: bool,
 ) -> None:
-    excluded_lemmas = [
-        {
+    excluded_lemmas = []
+    for lemma, document_frequency, total_frequency, doc_ids in rows:
+        entry = {
             "lemma": lemma,
             "document_frequency": document_frequency,
             "total_frequency": total_frequency,
-            "document_ids": [doc_id for doc_id in doc_ids.split(",") if doc_id],
         }
-        for lemma, document_frequency, total_frequency, doc_ids in rows
-    ]
+        if include_document_ids:
+            entry["document_ids"] = list(doc_ids)
+        excluded_lemmas.append(entry)
     diagnostics = {
         "created_at": get_timestamp(),
         "source_word_output": source_word_output,
+        "document_ids": "included" if include_document_ids else "suppressed",
         "excluded_lemmas": excluded_lemmas,
     }
     with smart_open(path, "w", encoding="utf-8", transport_params=get_transport_params(path)) as out:
@@ -195,6 +208,14 @@ def main() -> int:
         default=1,
         help="Report lemmas appearing in at most this many documents.",
     )
+    parser.add_argument(
+        "--include-document-ids",
+        action="store_true",
+        help=(
+            "Include document IDs for reported lemmas in TSV/JSON diagnostics. "
+            "Disabled by default because it is slower and can produce very large outputs."
+        ),
+    )
     parser.add_argument("--no-header", action="store_true")
     parser.add_argument(
         "--log-level",
@@ -231,33 +252,70 @@ def main() -> int:
     doc_ids_by_lemma: dict[str, list[str]] = {}
     document_count = 0
     token_count = 0
+    processed_files = 0
 
-    for doc_id, lemmas in iter_eligible_rows(inputs):
-        document_count += 1
-        token_count += len(lemmas)
-        counts = Counter(lemmas)
-        for lemma, count in counts.items():
-            total_freq[lemma] += count
-            seen_doc_ids = doc_ids_by_lemma.setdefault(lemma, [])
-            if doc_id in seen_doc_ids:
-                continue
-            doc_freq[lemma] += 1
-            if len(seen_doc_ids) <= args.max_document_frequency:
-                seen_doc_ids.append(doc_id)
+    for path in inputs:
+        processed_files += 1
+        log.info("Processing eligible file %d/%d: %s", processed_files, len(inputs), path)
+        rows_yielded = 0
+        try:
+            row_iter = iter_rows_from_path(path)
+            for doc_id, lemmas in row_iter:
+                rows_yielded += 1
+                document_count += 1
+                token_count += len(lemmas)
+                unique_lemmas = set(lemmas)
+                doc_freq.update(unique_lemmas)
+                total_freq.update(lemmas)
+                if args.include_document_ids:
+                    for lemma in unique_lemmas:
+                        seen_doc_ids = doc_ids_by_lemma.setdefault(lemma, [])
+                        if len(seen_doc_ids) < args.max_document_frequency:
+                            seen_doc_ids.append(doc_id)
+        except (OSError, EOFError) as exc:
+            if path.endswith(".bz2") and rows_yielded == 0:
+                log.warning("%s is not valid bzip2; retrying as plain text", path)
+                try:
+                    for doc_id, lemmas in iter_rows_from_path(path, raw=True):
+                        document_count += 1
+                        token_count += len(lemmas)
+                        unique_lemmas = set(lemmas)
+                        doc_freq.update(unique_lemmas)
+                        total_freq.update(lemmas)
+                        if args.include_document_ids:
+                            for lemma in unique_lemmas:
+                                seen_doc_ids = doc_ids_by_lemma.setdefault(lemma, [])
+                                if len(seen_doc_ids) < args.max_document_frequency:
+                                    seen_doc_ids.append(doc_id)
+                    continue
+                except (OSError, EOFError) as raw_exc:
+                    raise RuntimeError(f"failed reading {path}: {raw_exc}") from raw_exc
+            raise RuntimeError(f"failed reading {path}: {exc}") from exc
+        log.info(
+            "Processed %d documents, %d tokens, %d unique lemmas so far",
+            document_count,
+            token_count,
+            len(doc_freq),
+        )
 
     rows = [
         (
             lemma,
             count,
             total_freq[lemma],
-            ",".join(doc_ids_by_lemma.get(lemma, [])[: args.max_document_frequency]),
+            tuple(doc_ids_by_lemma.get(lemma, ())),
         )
         for lemma, count in doc_freq.items()
         if count <= args.max_document_frequency
     ]
     rows.sort(key=lambda item: (item[1], -item[2], item[0]))
 
-    write_rows(args.output, rows, header=not args.no_header)
+    write_rows(
+        args.output,
+        rows,
+        header=not args.no_header,
+        include_document_ids=args.include_document_ids,
+    )
     if args.word_output:
         write_words(args.word_output, rows)
     if args.word_diagnostics_output:
@@ -265,6 +323,7 @@ def main() -> int:
             args.word_diagnostics_output,
             rows,
             source_word_output=args.word_output,
+            include_document_ids=args.include_document_ids,
         )
 
     if args.metadata_output:
@@ -281,6 +340,7 @@ def main() -> int:
             "criteria": {
                 "input_suffix": args.input_suffix,
                 "max_document_frequency": args.max_document_frequency,
+                "include_document_ids": args.include_document_ids,
             },
         }
         with smart_open(args.metadata_output, "w", encoding="utf-8", transport_params=get_transport_params(args.metadata_output)) as handle:
