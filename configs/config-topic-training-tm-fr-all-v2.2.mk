@@ -54,7 +54,7 @@ TOPIC_TRAIN_LOWERCASE_TOKEN ?= true
 # Vocabulary trimming. French has millions of articles, so very low-frequency
 # lemmas are usually OCR, lemmatization, or table artifacts rather than useful
 # topic anchors.
-TOPIC_TRAIN_VOCAB_MIN_FREQ ?= 50
+TOPIC_TRAIN_VOCAB_MIN_FREQ ?= 100
 TOPIC_TRAIN_VOCAB_MAX_FREQ ?= 50000000
 TOPIC_TRAIN_NORMALIZED_PROGRESS_INTERVAL ?= 100000
 TOPIC_TRAIN_INCLUDE_VOCAB_DIR ?= resources/include-vocab
