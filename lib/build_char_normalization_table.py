@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 import unicodedata
 from pathlib import Path
 from typing import Any
@@ -38,10 +39,7 @@ try:
 except ImportError:  # pragma: no cover - exercised only in minimal envs
     smart_open = None
 
-try:
-    from impresso_cookbook import get_transport_params  # type: ignore
-except ImportError:  # pragma: no cover - exercised only in minimal envs
-    get_transport_params = None
+from impresso_cookbook import get_transport_params, setup_logging  # type: ignore
 
 try:
     from s3_overwrite import (  # type: ignore
@@ -51,6 +49,8 @@ try:
 except ImportError:  # pragma: no cover - exercised only in minimal envs
     add_force_s3_overwrite_argument = None
     assert_can_write_uri = None
+
+log = logging.getLogger(__name__)
 
 
 def parse_bool(value: str | bool) -> bool:
@@ -237,19 +237,32 @@ def main() -> None:
             "characters, local or s3:// URI."
         ),
     )
+    parser.add_argument(
+        "--log-level",
+        default="INFO",
+        choices=["DEBUG", "INFO", "WARNING", "ERROR"],
+        help="Logging level (default: %(default)s)",
+    )
+    parser.add_argument(
+        "--log-file", dest="log_file", help="Write log to FILE", metavar="FILE"
+    )
     if add_force_s3_overwrite_argument is not None:
         add_force_s3_overwrite_argument(parser)
     else:
         add_local_force_s3_overwrite_argument(parser)
     args = parser.parse_args()
+    setup_logging(args.log_level, args.log_file, logger=log)
 
     force_s3_overwrite = getattr(args, "force_s3_overwrite", False)
     if assert_can_write_uri is not None:
         assert_can_write_uri(args.output_json, force_s3_overwrite=force_s3_overwrite)
         assert_can_write_uri(args.report_json, force_s3_overwrite=force_s3_overwrite)
 
+    log.info("Loading character frequencies from %s", args.input_json)
     char_freqs = load_char_freqs(args.input_json)
+    log.info("Loaded %d input characters", len(char_freqs))
     table = build_table(char_freqs, min_count=args.min_count)
+    log.info("Built %d character normalization mappings", len(table))
     output = {
         "metadata": {
             "description": (
@@ -275,7 +288,7 @@ def main() -> None:
         with open_text(args.report_json, "w") as f:
             json.dump(report, f, ensure_ascii=False, indent=2)
 
-    print(f"Wrote character normalization table to {args.output_json}")
+    log.info("Wrote character normalization table to %s", args.output_json)
 
 
 if __name__ == "__main__":

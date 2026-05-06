@@ -67,6 +67,7 @@ import argparse
 import logging
 import sys
 from typing import Generator, Set, Optional, List
+from dotenv import load_dotenv
 from smart_open import open as smart_open  # type: ignore
 
 from impresso_cookbook import (  # type: ignore

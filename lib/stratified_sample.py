@@ -10,7 +10,6 @@ try:
 except ImportError:
     import json
 import re
-import sys
 from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Iterable
@@ -130,7 +129,7 @@ def main() -> int:
 
     inputs = expand_inputs(args.input, args.s3_prefix, args.input_suffix)
     if not inputs:
-        print("no input files found", file=sys.stderr)
+        log.error("No input files found")
         return 2
 
     assert_can_write_uri(args.output, force_s3_overwrite=args.force_s3_overwrite)

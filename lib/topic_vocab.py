@@ -9,7 +9,6 @@ try:
     import ujson as json  # type: ignore
 except ImportError:
     import json
-import sys
 from pathlib import Path
 from typing import Iterable
 
@@ -141,10 +140,7 @@ def main() -> int:
 
     freqs = data.get(args.freqs_key)
     if not isinstance(freqs, dict):
-        print(
-            f"lemmafreq file does not contain a {args.freqs_key!r} object",
-            file=sys.stderr,
-        )
+        log.error("Lemmafreq file does not contain a %r object", args.freqs_key)
         return 2
 
     rows = sorted(

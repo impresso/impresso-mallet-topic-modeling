@@ -52,10 +52,7 @@ try:
 except ImportError:  # pragma: no cover - exercised only in minimal envs
     smart_open = None
 
-try:
-    from impresso_cookbook import get_transport_params  # type: ignore
-except ImportError:  # pragma: no cover - exercised only in minimal envs
-    get_transport_params = None
+from impresso_cookbook import get_transport_params, setup_logging  # type: ignore
 
 try:
     from s3_overwrite import (  # type: ignore
@@ -89,17 +86,6 @@ def add_local_force_s3_overwrite_argument(parser: argparse.ArgumentParser) -> No
         default=False,
         metavar="TRUE/FALSE",
         help="Allow overwriting existing s3:// outputs. Defaults to FALSE.",
-    )
-
-
-def setup_local_logging(log_level: str, log_file: str | None = None) -> None:
-    handlers: list[logging.Handler] = [logging.StreamHandler()]
-    if log_file:
-        handlers.append(logging.FileHandler(log_file, encoding="utf-8"))
-    logging.basicConfig(
-        level=getattr(logging, log_level),
-        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-        handlers=handlers,
     )
 
 
@@ -343,7 +329,7 @@ def main() -> None:
     else:
         add_local_force_s3_overwrite_argument(parser)
     args = parser.parse_args()
-    setup_local_logging(args.log_level, args.log_file)
+    setup_logging(args.log_level, args.log_file, logger=log)
 
     if assert_can_write_uri is not None:
         assert_can_write_uri(

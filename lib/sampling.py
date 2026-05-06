@@ -5,7 +5,11 @@ script to filter texts with the help of a frequency distribution file --> using 
 
 import codecs
 import argparse
+import logging
 import random
+import sys
+
+from impresso_cookbook import setup_logging  # type: ignore
 
 __author__ = "Phillip Ströbel"
 __email__ = "pstroebel@cl.uzh.ch"
@@ -14,6 +18,7 @@ __copyright__ = "UZH, 2018"
 __status__ = "development"
 
 random.seed(42)
+log = logging.getLogger(__name__)
 
 def filter(jsonfile):
     """
@@ -32,7 +37,7 @@ def filter(jsonfile):
             if args.maximumLength > len(text[0].split(' ')) >= args.articleLength:
                 for_sampling.append('%s\t%s\t%s' % (aid[0], dummy[0], text[0]))
         except ValueError:
-            print('Not enough columns for ', line)
+            log.warning("Not enough columns for %s", line.rstrip("\n"))
 
     try:
         sampled = random.sample(for_sampling, args.sample)
@@ -50,6 +55,19 @@ if __name__ == '__main__':
     argparser.add_argument('-a', '--articleLength', help="threshold (int), minimum number of words for article to be processed", type=int, required=False)
     argparser.add_argument('-m', '--maximumLength', help="threshold (int), maximum number of words for article to be processed", type=int)
     argparser.add_argument('-s', '--sample', help="randomly sample specific amount of articles", type=int, required=False)
+    argparser.add_argument("--log-file", dest="log_file", help="Write log to FILE", metavar="FILE")
+    argparser.add_argument(
+        "--log-level",
+        default="INFO",
+        choices=["DEBUG", "INFO", "WARNING", "ERROR"],
+        help="Logging level (default: %(default)s)",
+    )
     args = argparser.parse_args()
+    setup_logging(args.log_level, args.log_file, logger=log)
+    log.info("%s", args)
 
-    filter(args.inputFile)
+    try:
+        filter(args.inputFile)
+    except Exception as exc:
+        log.error("Processing error: %s", exc, exc_info=True)
+        sys.exit(1)

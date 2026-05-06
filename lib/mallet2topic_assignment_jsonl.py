@@ -12,7 +12,9 @@ import collections
 
 from dotenv import load_dotenv
 from smart_open import open
-from impresso_cookbook import get_transport_params  # type: ignore
+from impresso_cookbook import get_transport_params, setup_logging  # type: ignore
+
+log = logging.getLogger(__name__)
 
 # Load S3 credentials from .env file at module level
 load_dotenv()
@@ -42,7 +44,7 @@ def read_tsv_generator(filename):
             if not line.startswith("#"):
                 yield line.strip().split("\t")
             if line_count % 1000 == 0:
-                logging.info(f"Processed {line_count} lines.")
+                log.info("Processed %d lines.", line_count)
 
 
 def read_text_by_ci_ref(filename):
@@ -62,7 +64,7 @@ def read_topic_words(filename, word_count=4):
         try:
             topic_id = int(row[0])
         except ValueError:
-            logging.warning("Skipping topickeys row with non-numeric topic id: %s", row)
+            log.warning("Skipping topickeys row with non-numeric topic id: %s", row)
             continue
         words_by_topic[topic_id] = row[2].split()[:word_count]
     return words_by_topic
@@ -221,7 +223,7 @@ def parse_mallet_file(
             assignment["original_text"] = text_by_ci_ref.get(ci_ref)
         yield assignment
 
-    logging.info("DUPLICATE-COUNT: %d", ci_ref_stats["DUPLICATE_COUNT"])
+    log.info("DUPLICATE-COUNT: %d", ci_ref_stats["DUPLICATE_COUNT"])
 
 
 def process_file(options):
@@ -253,19 +255,6 @@ def process_file(options):
         print(json.dumps(topic_assignment, ensure_ascii=False, separators=(",", ":")))
 
 
-def setup_logging(options):
-    """
-    Set up logging configuration based on command line options.
-
-    Args:
-        options (argparse.Namespace): Command line arguments.
-    """
-    log_level = logging.DEBUG if options.debug else logging.INFO
-    logging.basicConfig(
-        level=log_level, filename=options.logfile if options.logfile else None
-    )
-
-
 def main():
     """
     Main entry point for the script.
@@ -277,7 +266,20 @@ def main():
     )
 
     parser.add_argument("--version", action="version", version="0.99")
-    parser.add_argument("-l", "--logfile", help="Write log to FILE", metavar="FILE")
+    parser.add_argument(
+        "-l",
+        "--logfile",
+        "--log-file",
+        dest="log_file",
+        help="Write log to FILE",
+        metavar="FILE",
+    )
+    parser.add_argument(
+        "--log-level",
+        default="INFO",
+        choices=["DEBUG", "INFO", "WARNING", "ERROR"],
+        help="Logging level (default: %(default)s)",
+    )
     parser.add_argument(
         "-q",
         "--quiet",
@@ -343,12 +345,14 @@ def main():
         parser.error(
             "The --topic_count option is required when using the 'sparse' format"
         )
-    setup_logging(options)
+    log_level = "DEBUG" if options.debug else options.log_level
+    setup_logging(log_level, options.log_file, logger=log)
+    log.info("%s", options)
 
     try:
         process_file(options)
     except Exception as e:
-        logging.error("Processing failed: %s", e)
+        log.error("Processing failed: %s", e, exc_info=True)
         if options.debug:
             raise
 

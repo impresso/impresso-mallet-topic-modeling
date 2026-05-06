@@ -71,10 +71,7 @@ def iter_rows_from_path(path: str, *, raw: bool = False) -> Iterable[tuple[str, 
                 continue
             fields = row.split("\t", 2)
             if len(fields) != 3:
-                print(
-                    f"skipping malformed row in {path}:{line_number}",
-                    file=sys.stderr,
-                )
+                log.warning("Skipping malformed row in %s:%d", path, line_number)
                 continue
             doc_id, _, text = fields
             lemmas = [lemma for lemma in text.split() if lemma]
@@ -90,10 +87,7 @@ def iter_eligible_rows(paths: Iterable[str]) -> Iterable[tuple[str, list[str]]]:
                 yield item
         except (OSError, EOFError) as exc:
             if path.endswith(".bz2") and rows_yielded == 0:
-                print(
-                    f"warning: {path} is not valid bzip2; retrying as plain text",
-                    file=sys.stderr,
-                )
+                log.warning("%s is not valid bzip2; retrying as plain text", path)
                 try:
                     yield from iter_rows_from_path(path, raw=True)
                     continue
@@ -219,7 +213,7 @@ def main() -> int:
 
     inputs = expand_inputs(args.input, args.prefixes, args.input_suffix)
     if not inputs:
-        print("no eligible files found", file=sys.stderr)
+        log.error("No eligible files found")
         return 2
 
     assert_can_write_uri(args.output, force_s3_overwrite=args.force_s3_overwrite)
