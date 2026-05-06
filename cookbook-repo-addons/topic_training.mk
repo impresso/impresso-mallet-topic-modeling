@@ -79,6 +79,7 @@ MALLET_SMOKE_INFER_ITERATIONS ?= 100
 MALLET_TOPIC_ASSIGNMENT_THRESHOLD ?= 0.02
 TOPIC_TRAIN_SMOKE_VERBOSE ?= true
 TOPIC_TRAIN_WORD_THRESHOLD ?= 200
+TOPIC_TRAIN_OUTPUT_DOC_TOPICS ?= true
 # Upper bound on document frequency for rare-lemma diagnostics.
 # Lemmas appearing in *at most* this many documents are reported as singletons/rare.
 # Used as --max-document-frequency in analyze_doc_freq.py (not a minimum threshold).
@@ -368,8 +369,7 @@ topic-training-train-%: topic-training-import-% FORCE
 		--output-model $(call topic_train_model_local,$*) \
 		--inferencer-filename $(call topic_train_inferencer_local,$*) \
 		--output-topic-keys $(call topic_train_topickeys_local,$*) \
-		--topic-word-weights-file $(call topic_train_topicwordweights_local,$*) \
-		--output-doc-topics $(call topic_train_sample_doctopics_local,$*) \
+		--topic-word-weights-file $(call topic_train_topicwordweights_local,$*) $(if $(filter true,$(TOPIC_TRAIN_OUTPUT_DOC_TOPICS)),--output-doc-topics $(call topic_train_sample_doctopics_local,$*),) \
 		--num-topics $(MALLET_NUM_TOPICS) \
 		--num-iterations $(MALLET_TRAIN_ITERATIONS) \
 		--show-topics-interval $(MALLET_SHOW_TOPICS_INTERVAL) \
@@ -377,13 +377,12 @@ topic-training-train-%: topic-training-import-% FORCE
 		--optimize-interval $(MALLET_OPTIMIZE_INTERVAL) \
 		--num-threads $(MALLET_THREADS) \
 		--random-seed $(MALLET_RANDOM_SEED)
-	$(PYTHON) -c 'import json, datetime; data={"run_id":"$(TOPIC_TRAIN_RUN_ID)","language":"$*","created_at":datetime.datetime.now(datetime.timezone.utc).isoformat(),"mallet":{"num_topics":$(MALLET_NUM_TOPICS),"train_iterations":$(MALLET_TRAIN_ITERATIONS),"optimize_interval":$(MALLET_OPTIMIZE_INTERVAL),"threads":$(MALLET_THREADS),"random_seed":$(MALLET_RANDOM_SEED)},"vocab":"$(call topic_train_vocab_s3,$*)","sample":"$(call topic_train_sample_s3,$*)"}; open("$(call topic_train_metadata_local,$*)","w").write(json.dumps(data, indent=2, sort_keys=True)+"\n")'
+	$(PYTHON) -c 'import json, datetime; data={"run_id":"$(TOPIC_TRAIN_RUN_ID)","language":"$*","created_at":datetime.datetime.now(datetime.timezone.utc).isoformat(),"mallet":{"num_topics":$(MALLET_NUM_TOPICS),"train_iterations":$(MALLET_TRAIN_ITERATIONS),"optimize_interval":$(MALLET_OPTIMIZE_INTERVAL),"threads":$(MALLET_THREADS),"random_seed":$(MALLET_RANDOM_SEED),"output_doc_topics":"$(TOPIC_TRAIN_OUTPUT_DOC_TOPICS)"},"vocab":"$(call topic_train_vocab_s3,$*)","sample":"$(call topic_train_sample_s3,$*)"}; open("$(call topic_train_metadata_local,$*)","w").write(json.dumps(data, indent=2, sort_keys=True)+"\n")'
 	$(PYTHON) lib/copy_uri.py --force-s3-overwrite $(TOPIC_TRAIN_FORCE_S3_OVERWRITE) \
 		$(call topic_train_model_local,$*) $(call topic_train_model_s3,$*) \
 		$(call topic_train_inferencer_local,$*) $(call topic_train_inferencer_s3,$*) \
 		$(call topic_train_topickeys_local,$*) $(call topic_train_topickeys_s3,$*) \
-		$(call topic_train_topicwordweights_local,$*) $(call topic_train_topicwordweights_s3,$*) \
-		$(call topic_train_sample_doctopics_local,$*) $(call topic_train_sample_doctopics_s3,$*) \
+		$(call topic_train_topicwordweights_local,$*) $(call topic_train_topicwordweights_s3,$*) $(if $(filter true,$(TOPIC_TRAIN_OUTPUT_DOC_TOPICS)),$(call topic_train_sample_doctopics_local,$*) $(call topic_train_sample_doctopics_s3,$*),) \
 		$(call topic_train_metadata_local,$*) $(call topic_train_metadata_s3,$*)
 
 topic-training-describe-%: FORCE
@@ -430,8 +429,7 @@ topic-training-publish-%: FORCE
 		$(call topic_train_model_s3,$*) $(call topic_train_final_model_s3,$*) \
 		$(call topic_train_inferencer_s3,$*) $(call topic_train_final_inferencer_s3,$*) \
 		$(call topic_train_topickeys_s3,$*) $(call topic_train_final_topickeys_s3,$*) \
-		$(call topic_train_topicwordweights_s3,$*) $(call topic_train_final_topicwordweights_s3,$*) \
-		$(call topic_train_sample_doctopics_s3,$*) $(call topic_train_final_sample_doctopics_s3,$*) \
+		$(call topic_train_topicwordweights_s3,$*) $(call topic_train_final_topicwordweights_s3,$*) $(if $(filter true,$(TOPIC_TRAIN_OUTPUT_DOC_TOPICS)),$(call topic_train_sample_doctopics_s3,$*) $(call topic_train_final_sample_doctopics_s3,$*),) \
 		$(call topic_train_description_s3,$*) $(call topic_train_final_description_s3,$*) \
 		$(call topic_train_smoke_assignment_s3,$*) $(call topic_train_final_smoke_assignment_s3,$*) \
 		$(call topic_train_metadata_s3,$*) $(call topic_train_final_metadata_s3,$*)
