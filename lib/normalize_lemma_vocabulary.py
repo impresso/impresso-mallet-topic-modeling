@@ -40,6 +40,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 import re
 from collections import Counter, defaultdict
 from functools import lru_cache
@@ -65,6 +66,8 @@ except ImportError:  # pragma: no cover - exercised only in minimal envs
     add_force_s3_overwrite_argument = None
     assert_can_write_uri = None
 
+log = logging.getLogger(__name__)
+
 
 def parse_bool(value: str | bool) -> bool:
     if isinstance(value, bool):
@@ -86,6 +89,17 @@ def add_local_force_s3_overwrite_argument(parser: argparse.ArgumentParser) -> No
         default=False,
         metavar="TRUE/FALSE",
         help="Allow overwriting existing s3:// outputs. Defaults to FALSE.",
+    )
+
+
+def setup_local_logging(log_level: str, log_file: str | None = None) -> None:
+    handlers: list[logging.Handler] = [logging.StreamHandler()]
+    if log_file:
+        handlers.append(logging.FileHandler(log_file, encoding="utf-8"))
+    logging.basicConfig(
+        level=getattr(logging, log_level),
+        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+        handlers=handlers,
     )
 
 
@@ -215,6 +229,7 @@ def normalize_freqs(
     freqs: dict[str, int],
     normalizer: LemmaNormalizer,
     max_examples_per_norm: int = 10,
+    progress_interval: int = 100_000,
 ) -> dict[str, Any]:
     normalized_freqs: Counter[str] = Counter()
     removed_freq = 0
@@ -224,20 +239,30 @@ def normalize_freqs(
     raw_examples: dict[str, list[tuple[str, int]]] = defaultdict(list)
     removed_examples: Counter[str] = Counter()
 
-    for raw, count in freqs.items():
+    total_types = len(freqs)
+    for index, (raw, count) in enumerate(freqs.items(), 1):
         norm = normalizer.normalize(raw)
         if norm is None:
             removed_freq += count
             removed_types += 1
             removed_examples[raw] += count
-            continue
+        else:
+            normalized_freqs[norm] += count
+            if norm != raw:
+                changed_freq += count
+                changed_types += 1
+                if len(raw_examples[norm]) < max_examples_per_norm:
+                    raw_examples[norm].append((raw, count))
 
-        normalized_freqs[norm] += count
-        if norm != raw:
-            changed_freq += count
-            changed_types += 1
-            if len(raw_examples[norm]) < max_examples_per_norm:
-                raw_examples[norm].append((raw, count))
+        if progress_interval > 0 and index % progress_interval == 0:
+            log.info(
+                "Normalized %d/%d vocab items; kept=%d removed=%d changed=%d",
+                index,
+                total_types,
+                len(normalized_freqs),
+                removed_types,
+                changed_types,
+            )
 
     normalized_freqs_sorted = dict(
         sorted(normalized_freqs.items(), key=lambda x: (-x[1], x[0]))
@@ -295,11 +320,30 @@ def main() -> None:
         type=int,
         default=2_000_000,
     )
+    parser.add_argument(
+        "--progress-interval",
+        type=int,
+        default=100_000,
+        help=(
+            "Log progress every N input vocab items. Use 0 to disable. "
+            "Default: %(default)s."
+        ),
+    )
+    parser.add_argument(
+        "--log-level",
+        default="INFO",
+        choices=["DEBUG", "INFO", "WARNING", "ERROR"],
+        help="Logging level (default: %(default)s)",
+    )
+    parser.add_argument(
+        "--log-file", dest="log_file", help="Write log to FILE", metavar="FILE"
+    )
     if add_force_s3_overwrite_argument is not None:
         add_force_s3_overwrite_argument(parser)
     else:
         add_local_force_s3_overwrite_argument(parser)
     args = parser.parse_args()
+    setup_local_logging(args.log_level, args.log_file)
 
     if assert_can_write_uri is not None:
         assert_can_write_uri(
@@ -307,15 +351,30 @@ def main() -> None:
             force_s3_overwrite=getattr(args, "force_s3_overwrite", False),
         )
 
+    log.info("Loading frequencies from %s", args.input_freqs_json)
     freqs = load_freqs(args.input_freqs_json)
+    log.info("Loaded %d input vocab items", len(freqs))
+    log.info("Loading character normalization table from %s", args.char_normalization_json)
     translation_table = load_translation_table(args.char_normalization_json)
+    log.info("Loaded %d character normalization mappings", len(translation_table))
     normalizer = LemmaNormalizer(
         translation_table=translation_table,
         min_alpha=args.min_alpha,
         min_alpha_ratio=args.min_alpha_ratio,
         cache_size=args.cache_size,
     )
-    result = normalize_freqs(freqs, normalizer)
+    result = normalize_freqs(
+        freqs,
+        normalizer,
+        progress_interval=args.progress_interval,
+    )
+    log.info(
+        "Finished normalization: input=%d normalized=%d removed=%d changed=%d",
+        result["diagnostics"]["input_num_types"],
+        result["diagnostics"]["normalized_num_types"],
+        result["diagnostics"]["removed_num_types"],
+        result["diagnostics"]["changed_num_types"],
+    )
     output = {
         "metadata": {
             "description": (
@@ -334,17 +393,15 @@ def main() -> None:
     with open_text(args.output_json, "w") as f:
         json.dump(output, f, ensure_ascii=False, indent=2, sort_keys=True)
 
-    print(f"Wrote normalized vocabulary to {args.output_json}")
-    print(
-        "Types:",
+    log.info("Wrote normalized vocabulary to %s", args.output_json)
+    log.info(
+        "Types: %d -> %d",
         result["diagnostics"]["input_num_types"],
-        "->",
         result["diagnostics"]["normalized_num_types"],
     )
-    print(
-        "Total frequency:",
+    log.info(
+        "Total frequency: %d -> %d",
         result["diagnostics"]["input_total_freq"],
-        "->",
         result["diagnostics"]["normalized_total_freq"],
     )
 
