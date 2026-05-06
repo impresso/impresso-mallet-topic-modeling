@@ -111,6 +111,7 @@ def parse_matrix_file(row, eps, lang, topic_model, numeric_topic_ids, topic_word
         for t, p in enumerate(topics)
         if (fp := float(p)) >= eps
     ]
+    topics.sort(key=lambda topic: topic["p"], reverse=True)
 
     return {
         "topic_model": topic_model,
@@ -152,6 +153,7 @@ def parse_sparse_file(
                     topic_words,
                 )
             )
+    topics.sort(key=lambda topic: topic["p"], reverse=True)
 
     return {
         "topic_model": topic_model,

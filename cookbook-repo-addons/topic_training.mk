@@ -115,6 +115,7 @@ topic_train_local_dir = $(LOCAL_TOPIC_TRAIN_BASE_PATH)/$(1)
 topic_train_sample_local = $(LOCAL_TOPIC_TRAIN_BASE_PATH)/sample/sample.tsv
 topic_train_sample_mallet_local = $(LOCAL_TOPIC_TRAIN_BASE_PATH)/mallet/$(1).sample.mallet
 topic_train_model_local = $(LOCAL_TOPIC_TRAIN_BASE_PATH)/models/$(1).model
+topic_train_model_log_local = $(LOCAL_TOPIC_TRAIN_BASE_PATH)/models/$(1).model.log
 topic_train_inferencer_local = $(LOCAL_TOPIC_TRAIN_BASE_PATH)/models/$(1).inferencer
 topic_train_topickeys_local = $(LOCAL_TOPIC_TRAIN_BASE_PATH)/models/$(1).topickeys
 topic_train_topicwordweights_local = $(LOCAL_TOPIC_TRAIN_BASE_PATH)/models/$(1).topicwordweights
@@ -128,6 +129,7 @@ topic_train_smoke_assignment_local = $(LOCAL_TOPIC_TRAIN_BASE_PATH)/smoke/$(1).t
 topic_train_metadata_local = $(LOCAL_TOPIC_TRAIN_BASE_PATH)/metadata/$(1).training.json
 
 topic_train_model_s3 = $(S3_TOPIC_TRAIN_BASE_PATH)/models/$(1).model
+topic_train_model_log_s3 = $(S3_TOPIC_TRAIN_BASE_PATH)/models/$(1).model.log
 topic_train_sample_mallet_s3 = $(S3_TOPIC_TRAIN_BASE_PATH)/mallet/$(1).sample.mallet
 topic_train_inferencer_s3 = $(S3_TOPIC_TRAIN_BASE_PATH)/models/$(1).inferencer
 topic_train_topickeys_s3 = $(S3_TOPIC_TRAIN_BASE_PATH)/models/$(1).topickeys
@@ -142,6 +144,7 @@ topic_train_final_vocab_meta_s3 = $(S3_TOPIC_TRAIN_FINAL_BASE_PATH)/vocab/$(1).v
 topic_train_final_sample_manifest_s3 = $(S3_TOPIC_TRAIN_FINAL_BASE_PATH)/sample/sample.manifest.json
 topic_train_final_sample_mallet_s3 = $(S3_TOPIC_TRAIN_FINAL_BASE_PATH)/mallet/$(1).sample.mallet
 topic_train_final_model_s3 = $(S3_TOPIC_TRAIN_FINAL_BASE_PATH)/models/$(1).model
+topic_train_final_model_log_s3 = $(S3_TOPIC_TRAIN_FINAL_BASE_PATH)/models/$(1).model.log
 topic_train_final_inferencer_s3 = $(S3_TOPIC_TRAIN_FINAL_BASE_PATH)/models/$(1).inferencer
 topic_train_final_topickeys_s3 = $(S3_TOPIC_TRAIN_FINAL_BASE_PATH)/models/$(1).topickeys
 topic_train_final_topicwordweights_s3 = $(S3_TOPIC_TRAIN_FINAL_BASE_PATH)/models/$(1).topicwordweights
@@ -370,7 +373,7 @@ topic-training-import-%: FORCE
 
 topic-training-train-%: topic-training-import-% FORCE
 	@mkdir -p $(LOCAL_TOPIC_TRAIN_BASE_PATH)/models $(LOCAL_TOPIC_TRAIN_BASE_PATH)/metadata
-	MEMORY=$(MALLET_TRAIN_MEMORY) $(MALLET) train-topics \
+	set -o pipefail; MEMORY=$(MALLET_TRAIN_MEMORY) $(MALLET) train-topics \
 		--input $(call topic_train_sample_mallet_local,$*) \
 		--output-model $(call topic_train_model_local,$*) \
 		--inferencer-filename $(call topic_train_inferencer_local,$*) \
@@ -382,10 +385,11 @@ topic-training-train-%: topic-training-import-% FORCE
 		--optimize-burn-in $(MALLET_OPTIMIZE_BURN_IN) \
 		--optimize-interval $(MALLET_OPTIMIZE_INTERVAL) \
 		--num-threads $(MALLET_THREADS) \
-		--random-seed $(MALLET_RANDOM_SEED)
+		--random-seed $(MALLET_RANDOM_SEED) 2>&1 | tee $(call topic_train_model_log_local,$*)
 	$(PYTHON) -c 'import json, datetime; data={"run_id":"$(TOPIC_TRAIN_RUN_ID)","language":"$*","created_at":datetime.datetime.now(datetime.timezone.utc).isoformat(),"mallet":{"num_topics":$(MALLET_NUM_TOPICS),"train_iterations":$(MALLET_TRAIN_ITERATIONS),"optimize_interval":$(MALLET_OPTIMIZE_INTERVAL),"threads":$(MALLET_THREADS),"random_seed":$(MALLET_RANDOM_SEED),"output_doc_topics":"$(TOPIC_TRAIN_OUTPUT_DOC_TOPICS)"},"vocab":"$(call topic_train_vocab_s3,$*)","sample":"$(call topic_train_sample_s3,$*)"}; open("$(call topic_train_metadata_local,$*)","w").write(json.dumps(data, indent=2, sort_keys=True)+"\n")'
 	$(PYTHON) lib/copy_uri.py --force-s3-overwrite $(TOPIC_TRAIN_FORCE_S3_OVERWRITE) \
 		$(call topic_train_model_local,$*) $(call topic_train_model_s3,$*) \
+		$(call topic_train_model_log_local,$*) $(call topic_train_model_log_s3,$*) \
 		$(call topic_train_inferencer_local,$*) $(call topic_train_inferencer_s3,$*) \
 		$(call topic_train_topickeys_local,$*) $(call topic_train_topickeys_s3,$*) \
 		$(call topic_train_topicwordweights_local,$*) $(call topic_train_topicwordweights_s3,$*) $(if $(filter true,$(TOPIC_TRAIN_OUTPUT_DOC_TOPICS)),$(call topic_train_sample_doctopics_local,$*) $(call topic_train_sample_doctopics_s3,$*),) \
@@ -433,6 +437,7 @@ topic-training-publish-%: FORCE
 		$(call topic_train_sample_manifest_s3,$*) $(call topic_train_final_sample_manifest_s3,$*) \
 		$(call topic_train_sample_mallet_s3,$*) $(call topic_train_final_sample_mallet_s3,$*) \
 		$(call topic_train_model_s3,$*) $(call topic_train_final_model_s3,$*) \
+		$(call topic_train_model_log_s3,$*) $(call topic_train_final_model_log_s3,$*) \
 		$(call topic_train_inferencer_s3,$*) $(call topic_train_final_inferencer_s3,$*) \
 		$(call topic_train_topickeys_s3,$*) $(call topic_train_final_topickeys_s3,$*) \
 		$(call topic_train_topicwordweights_s3,$*) $(call topic_train_final_topicwordweights_s3,$*) $(if $(filter true,$(TOPIC_TRAIN_OUTPUT_DOC_TOPICS)),$(call topic_train_sample_doctopics_s3,$*) $(call topic_train_final_sample_doctopics_s3,$*),) \
