@@ -216,6 +216,15 @@ def main() -> int:
             "Disabled by default because it is slower and can produce very large outputs."
         ),
     )
+    parser.add_argument(
+        "--progress-interval",
+        type=int,
+        default=100_000,
+        help=(
+            "Log progress every N documents. Use 0 to disable. "
+            "Default: %(default)s."
+        ),
+    )
     parser.add_argument("--no-header", action="store_true")
     parser.add_argument(
         "--log-level",
@@ -272,6 +281,16 @@ def main() -> int:
                         seen_doc_ids = doc_ids_by_lemma.setdefault(lemma, [])
                         if len(seen_doc_ids) < args.max_document_frequency:
                             seen_doc_ids.append(doc_id)
+                if (
+                    args.progress_interval > 0
+                    and document_count % args.progress_interval == 0
+                ):
+                    log.info(
+                        "Processed %d documents, %d tokens, %d unique lemmas",
+                        document_count,
+                        token_count,
+                        len(doc_freq),
+                    )
         except (OSError, EOFError) as exc:
             if path.endswith(".bz2") and rows_yielded == 0:
                 log.warning("%s is not valid bzip2; retrying as plain text", path)
@@ -287,6 +306,16 @@ def main() -> int:
                                 seen_doc_ids = doc_ids_by_lemma.setdefault(lemma, [])
                                 if len(seen_doc_ids) < args.max_document_frequency:
                                     seen_doc_ids.append(doc_id)
+                        if (
+                            args.progress_interval > 0
+                            and document_count % args.progress_interval == 0
+                        ):
+                            log.info(
+                                "Processed %d documents, %d tokens, %d unique lemmas",
+                                document_count,
+                                token_count,
+                                len(doc_freq),
+                            )
                     continue
                 except (OSError, EOFError) as raw_exc:
                     raise RuntimeError(f"failed reading {path}: {raw_exc}") from raw_exc
