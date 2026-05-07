@@ -166,7 +166,7 @@ help-topic-training:
 	@echo "  make topic-training-char-normalization-<lang>"
 	@echo "  make topic-training-normalized-lemma-vocab-<lang>"
 	@echo "  make topic-training-vocab-<lang>"
-	@echo "  make topic-training-vocabs"
+	@echo "  make topic-training-vocabs                           # all langs"
 	@echo "  make topic-training-eligible-newspaper LNG=de NEWSPAPER=BL/AATA"
 	@echo "  make topic-training-eligible-<lang>"
 	@echo "  make topic-training-eligible-<lang> COLLECTION_JOBS=4 MAX_LOAD=8"
@@ -176,6 +176,7 @@ help-topic-training:
 	@echo "  make topic-training-rare-docfreq-negative-lemmas-<lang>"
 	@echo "  make topic-training-vocab-<lang> TOPIC_TRAIN_ADDITIONAL_EXCLUDE_VOCAB_<lang>=s3://..."
 	@echo "  make topic-training-prepare-<lang>  # vocab + eligible + diagnostics (review output, then rerun vocab with exclusions)"
+	@echo "  make topic-training-prepares                         # all langs sequentially"
 	@echo "  make topic-training-sample-<lang>"
 	@echo "  make topic-training-import-<lang>"
 	@echo "  make topic-training-train-<lang>"
@@ -183,6 +184,7 @@ help-topic-training:
 	@echo "  make topic-training-smoke-infer-<lang>"
 	@echo "  make topic-training-publish-<lang>"
 	@echo "  make topic-training-all-<lang>"
+	@echo "  make topic-training-alls                             # all langs sequentially"
 	@echo "  make check-topic-training-mallet"
 	@echo "S3 base: $(S3_TOPIC_TRAIN_BASE_PATH)"
 	@echo "Final base: $(S3_TOPIC_TRAIN_FINAL_BASE_PATH)"
@@ -452,16 +454,26 @@ topic-training-publish-%: FORCE
 # before proceeding to topic-training-sample-% / topic-training-all-%.
 topic-training-prepare-%: FORCE
 	$(MAKE) topic-training-vocab-$*
-	$(MAKE) topic-training-eligible-$*
+	$(MAKE) topic-training-eligible-$* COLLECTION_JOBS=$(COLLECTION_JOBS) MAX_LOAD=$(MAX_LOAD)
 	$(MAKE) topic-training-singleton-lemmas-$*
 	$(MAKE) topic-training-rare-docfreq-negative-lemmas-$*
 
+# Run the full preparation pipeline for all configured languages, one at a time.
+# eligible-% is already internally parallel (GNU parallel, bounded by COLLECTION_JOBS/MAX_LOAD);
+# running multiple languages simultaneously would over-commit the machine.
+topic-training-prepares: $(foreach lang,$(TOPIC_TRAIN_LANGS),topic-training-prepare-$(lang))
+
 topic-training-all-%: FORCE
 	$(MAKE) topic-training-vocab-$*
-	$(MAKE) topic-training-eligible-$*
+	$(MAKE) topic-training-eligible-$* COLLECTION_JOBS=$(COLLECTION_JOBS) MAX_LOAD=$(MAX_LOAD)
 	$(MAKE) topic-training-sample-$*
 	$(MAKE) topic-training-train-$*
 	$(MAKE) topic-training-describe-$*
 	$(MAKE) topic-training-smoke-infer-$*
+
+# Run the full training pipeline for all configured languages, one at a time.
+# eligible-% is already internally parallel; sequential language processing prevents
+# over-committing the machine. Control internal parallelism with COLLECTION_JOBS and MAX_LOAD.
+topic-training-alls: $(foreach lang,$(TOPIC_TRAIN_LANGS),topic-training-all-$(lang))
 
 $(call log.debug, COOKBOOK END INCLUDE: cookbook-repo-addons/topic_training.mk)
