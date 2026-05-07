@@ -540,6 +540,62 @@ This repository integrates with the [Impresso Make-Based Processing Cookbook](co
 
 See [cookbook/README.md](cookbook/README.md) for detailed information.
 
+## Running a Full Training Pipeline
+
+Version-specific training scripts in `scripts/` orchestrate all four language models in sequence, capture per-language logs, and guide you through the mandatory vocabulary review step.
+
+### Step 1 — Preparation (vocab + eligible texts + diagnostics)
+
+```bash
+./scripts/prepare-v3.0.0.sh
+# Optional: control parallelism
+COLLECTION_JOBS=4 MAX_LOAD=8 ./scripts/prepare-v3.0.0.sh
+```
+
+Logs are written to `logs/prepare-v3.0.0-<lang>-<timestamp>.log`.
+
+After the script completes, **review the diagnostic vocab output** for each language:
+
+- `topic-training-singleton-lemmas-<lang>` output — lemmas appearing in only one document
+- `topic-training-rare-docfreq-negative-lemmas-<lang>` output — rare lemmas that are likely noise
+
+Update `resources/exclude-vocab/` with any additional terms to exclude, then rerun vocabulary for that language:
+
+```bash
+make topic-training-vocab-de \
+  CFG=configs/config-topic-training-tm-de-all-v3.0.mk \
+  TOPIC_TRAIN_ADDITIONAL_EXCLUDE_VOCAB_de=resources/exclude-vocab/my-extra-exclusions.txt
+```
+
+### Step 2 — Training (sample + MALLET import + train + describe + smoke-infer)
+
+```bash
+./scripts/train-v3.0.0.sh
+# Optional: control parallelism (only affects the eligible step if it re-runs)
+COLLECTION_JOBS=4 MAX_LOAD=8 ./scripts/train-v3.0.0.sh
+```
+
+Logs are written to `logs/train-v3.0.0-<lang>-<timestamp>.log`.
+
+Make stamp files ensure already-completed steps are skipped on re-runs. To force a specific step to re-run, delete the corresponding stamp file in `build.d/`.
+
+### Single-language runs
+
+You can also run individual make targets directly for one language at a time:
+
+```bash
+# Preparation only
+make topic-training-prepare-de CFG=configs/config-topic-training-tm-de-all-v3.0.mk
+
+# Full pipeline
+make topic-training-all-de CFG=configs/config-topic-training-tm-de-all-v3.0.mk
+
+# Publish after review
+make topic-training-publish-de CFG=configs/config-topic-training-tm-de-all-v3.0.mk
+```
+
+Run `make help-topic-training` to see all available targets.
+
 ## Contributing
 
 Contributions are welcome! This project is part of the Impresso project for historical newspaper processing.

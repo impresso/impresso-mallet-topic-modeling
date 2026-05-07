@@ -147,6 +147,19 @@ ci_id<TAB>DUMMY<TAB>lemma1 lemma2 lemma3 ...
 - Do not run full training, full eligible extraction, or publish targets without
   confirming intent; they can be expensive and require live S3 credentials.
 
+## Key Documentation Files
+
+- `README.md`: human-facing documentation. Explains the project, how to install
+  it, and how to run the training pipeline (including the `scripts/` wrappers).
+  Update this when adding user-visible features or new scripts.
+- `RELEASE_PROCESS.md`: agent-facing checklist for preparing and publishing a
+  GitHub release (branching, commit order, tagging, merging to main). It is not
+  a user guide. Do not add operational training instructions here.
+- `PLANNING.md`: pipeline design notes and artifact layout. Useful background
+  context; not a runbook.
+- `AGENT.md` (this file): agent-facing conventions, safety rules, and validation
+  steps.
+
 ## Validation
 
 Low-risk checks:
