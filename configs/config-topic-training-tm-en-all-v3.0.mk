@@ -49,7 +49,7 @@ TOPIC_TRAIN_POS_TAGS ?= NOUN,PROPN
 TOPIC_TRAIN_MIN_LEMMA_LENGTH ?= 2
 TOPIC_TRAIN_MIN_VOCAB_TOKENS ?= 8
 TOPIC_TRAIN_MIN_UNIQUE_LEMMAS ?= 1
-TOPIC_TRAIN_LOWERCASE_TOKEN ?= false
+TOPIC_TRAIN_LOWERCASE_TOKEN ?= true
 
 # Vocabulary trimming. English is similar to French in corpus scale, so very
 # low-frequency lemmas are usually OCR, lemmatization, or table artifacts rather
