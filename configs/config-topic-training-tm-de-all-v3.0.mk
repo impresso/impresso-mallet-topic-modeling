@@ -1,21 +1,21 @@
-# French MALLET topic-training configuration.
+# German MALLET topic-training configuration.
 #
 # This config mirrors the existing inference model specification pattern:
 #   tm-de-all-v2.0.config.json
 #   tm-fr-all-v2.0.config.json
 #
-# French model specification for v2.2:
+# German model specification for v3.0:
 #   {
 #     "uposFilter": ["NOUN", "PROPN"],
 #     "topic_count": 100,
-#     "language": "fr",
-#     "model_id": "tm-fr-all-v2.2",
+#     "language": "de",
+#     "model_id": "tm-de-all-v3.0",
 #     "lowercase_token": true,
 #     "min_lemmas": 8
 #   }
 #
 # Usage:
-#   remake topic-training-all-fr CFG=configs/config-topic-training-tm-fr-all-v2.2.mk
+#   remake topic-training-all-de CFG=configs/config-topic-training-tm-de-all-v3.0.mk
 
 LOGGING_LEVEL ?= INFO
 SHELL ?= /bin/bash
@@ -40,28 +40,27 @@ NEWSPAPER_HAS_PROVIDER ?= 1
 TOPIC_TRAIN_BUCKET ?= 130-component-sandbox
 TOPIC_TRAIN_FINAL_BUCKET ?= 132-component-final
 TOPIC_TRAIN_PREFIX ?= topics-mallet
-TOPIC_TRAIN_RUN_ID ?= tm-fr-all-v2.2
-TOPIC_TRAIN_LANGS ?= fr
+TOPIC_TRAIN_RUN_ID ?= tm-de-all-v3.0
+TOPIC_TRAIN_LANGS ?= de
 
-# French model specification.
-TOPIC_TRAIN_MODEL_ID ?= tm-fr-all-v2.2
+# German model specification.
+TOPIC_TRAIN_MODEL_ID ?= tm-de-all-v3.0
 TOPIC_TRAIN_POS_TAGS ?= NOUN,PROPN
 TOPIC_TRAIN_MIN_LEMMA_LENGTH ?= 3
 TOPIC_TRAIN_MIN_VOCAB_TOKENS ?= 8
 TOPIC_TRAIN_MIN_UNIQUE_LEMMAS ?= 1
 TOPIC_TRAIN_LOWERCASE_TOKEN ?= true
 
-# Vocabulary trimming. French has millions of articles, so very low-frequency
-# lemmas are usually OCR, lemmatization, or table artifacts rather than useful
-# topic anchors.
+# Vocabulary trimming. German is similar to French/English in corpus scale, so
+# very low-frequency lemmas are usually OCR, lemmatization, or table artifacts
+# rather than useful topic anchors.
 TOPIC_TRAIN_VOCAB_MIN_FREQ ?= 100
 TOPIC_TRAIN_VOCAB_MAX_FREQ ?= 50000000
 TOPIC_TRAIN_NORMALIZED_PROGRESS_INTERVAL ?= 100000
 TOPIC_TRAIN_INCLUDE_VOCAB_DIR ?= resources/include-vocab
 TOPIC_TRAIN_EXCLUDE_VOCAB_DIR ?= resources/exclude-vocab
 TOPIC_TRAIN_NEGATIVE_DOC_FREQ_MAX ?= 10
-TOPIC_TRAIN_ADDITIONAL_EXCLUDE_VOCAB_fr += resources/exclude-vocab/tm-fr-all-v2.2-df-exclusion.docfreq-lte-$(TOPIC_TRAIN_NEGATIVE_DOC_FREQ_MAX).txt
-TOPIC_TRAIN_ADDITIONAL_EXCLUDE_VOCAB_fr += resources/exclude-vocab/tm-fr-all-v2.2-all-non-words.txt
+TOPIC_TRAIN_ADDITIONAL_EXCLUDE_VOCAB_de += resources/exclude-vocab/tm-de-all-v3.0-df-exclusion.docfreq-lte-$(TOPIC_TRAIN_NEGATIVE_DOC_FREQ_MAX).txt
 
 # Eligible-text and sampling defaults.
 TOPIC_TRAIN_MAX_TOKENS ?= 4500

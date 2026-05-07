@@ -1,7 +1,5 @@
 ber
-femme
 heure
-homme
 madame
 mar
 mlle

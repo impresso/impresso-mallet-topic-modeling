@@ -20,7 +20,7 @@ outputs produced here.
 - `cookbook-repo-addons/topic_training.mk`: repo-specific MALLET topic-training
   pipeline and artifact contract.
 - `configs/`: run-specific topic-training configs, for example
-  `config-topic-training-tm-en-all-v2.2.mk`.
+  `config-topic-training-tm-en-all-v3.0.mk`.
 - `lib/`: Python command-line utilities for vocabulary building, eligible-text
   extraction, sampling, MALLET output conversion, and local/S3 copying.
 - `resources/exclude-vocab/`: language-specific deny lists used by vocabulary
@@ -44,7 +44,7 @@ this project. Run make targets with `remake` locally, for example:
 
 ```bash
 remake help-topic-training
-remake topic-training-all-en CFG=configs/config-topic-training-tm-en-all-v2.2.mk
+remake topic-training-all-en CFG=configs/config-topic-training-tm-en-all-v3.0.mk
 ```
 
 Keep `make` as the command name in Makefiles and user-facing documentation. Do

@@ -9,13 +9,13 @@
 #     "uposFilter": ["NOUN", "PROPN"],
 #     "topic_count": 100,
 #     "language": "en",
-#     "model_id": "tm-en-all-v2.2",
+#     "model_id": "tm-en-all-v3.0",
 #     "lowercase_token": false,
 #     "min_lemmas": 8
 #   }
 #
 # Usage:
-#   remake topic-training-all-en CFG=configs/config-topic-training-tm-en-all-v2.2.mk
+#   remake topic-training-all-en CFG=configs/config-topic-training-tm-en-all-v3.0.mk
 
 LOGGING_LEVEL ?= INFO
 SHELL ?= /bin/bash
@@ -40,11 +40,11 @@ NEWSPAPER_HAS_PROVIDER ?= 1
 TOPIC_TRAIN_BUCKET ?= 130-component-sandbox
 TOPIC_TRAIN_FINAL_BUCKET ?= 132-component-final
 TOPIC_TRAIN_PREFIX ?= topics-mallet
-TOPIC_TRAIN_RUN_ID ?= tm-en-all-v2.2
+TOPIC_TRAIN_RUN_ID ?= tm-en-all-v3.0
 TOPIC_TRAIN_LANGS ?= en
 
 # English model specification.
-TOPIC_TRAIN_MODEL_ID ?= tm-en-all-v2.2
+TOPIC_TRAIN_MODEL_ID ?= tm-en-all-v3.0
 TOPIC_TRAIN_POS_TAGS ?= NOUN,PROPN
 TOPIC_TRAIN_MIN_LEMMA_LENGTH ?= 2
 TOPIC_TRAIN_MIN_VOCAB_TOKENS ?= 8
@@ -60,7 +60,7 @@ TOPIC_TRAIN_NORMALIZED_PROGRESS_INTERVAL ?= 100000
 TOPIC_TRAIN_INCLUDE_VOCAB_DIR ?= resources/include-vocab
 TOPIC_TRAIN_EXCLUDE_VOCAB_DIR ?= resources/exclude-vocab
 TOPIC_TRAIN_NEGATIVE_DOC_FREQ_MAX ?= 10
-TOPIC_TRAIN_ADDITIONAL_EXCLUDE_VOCAB_en += resources/exclude-vocab/tm-en-all-v2.2-df-exclusion.docfreq-lte-$(TOPIC_TRAIN_NEGATIVE_DOC_FREQ_MAX).txt
+TOPIC_TRAIN_ADDITIONAL_EXCLUDE_VOCAB_en += resources/exclude-vocab/tm-en-all-v3.0-df-exclusion.docfreq-lte-$(TOPIC_TRAIN_NEGATIVE_DOC_FREQ_MAX).txt
 
 # Eligible-text and sampling defaults.
 TOPIC_TRAIN_MAX_TOKENS ?= 4500
