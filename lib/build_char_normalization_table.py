@@ -77,12 +77,19 @@ def add_local_force_s3_overwrite_argument(parser: argparse.ArgumentParser) -> No
 
 
 MANUAL_CHAR_MAP: dict[str, str | None] = {
-    # Ligatures and special Latin letters
+    # Ligatures and special Latin letters.
+    # Goal: language-independent Latin-script ASCII folding.
+    # Use base-letter fold (ä→a, ö→o, ü→u) not German transliteration (→ae/oe/ue).
+    # NFKD decomposition handles ordinary diacritics; list here only what NFKD
+    # cannot resolve or where we want to override the default decomposition.
     "œ": "oe",
     "Œ": "oe",
     "æ": "ae",
     "Æ": "ae",
     "ß": "ss",
+    "ﬁ": "fi",   # fi ligature (NFKD also resolves, listed for clarity)
+    "ﬂ": "fl",   # fl ligature
+    "ſ": "s",    # long s ſ
     "þ": "th",
     "Þ": "th",
     "ð": "d",
@@ -91,39 +98,55 @@ MANUAL_CHAR_MAP: dict[str, str | None] = {
     "ı": "i",
     "ł": "l",
     "ӧ": "o",
-    # Spacing diacritics should not introduce spaces inside tokens.
+    # Spacing diacritics — delete, do not insert a space inside a token.
     "¨": None,
     "¯": None,
     "¸": None,
     "˜": None,
-    # Apostrophe variants
-    "’": "'",
-    "‘": "'",
+    "˝": None,   # ˝ double acute accent (spacing diacritic)
+    "᾿": None,   # ᾿ Greek psili (spacing mark)
+    # Apostrophe variants → canonical apostrophe
+    "’": "'",    # '
+    "‘": "'",    # '
     "ʼ": "'",
     "ʻ": "'",
     "`": "'",
     "´": "'",
     "′": "'",
-    # Hyphen/dash variants
-    "‐": "-",
-    "-": "-",
-    "‒": "-",
-    "–": "-",
-    "—": "-",
-    "−": "-",
-    "⸗": "-",
+    # Hyphen/dash variants → ASCII hyphen
+    "‐": "-",    # ‐ hyphen
+    "‑": "-",    # ‑ non-breaking hyphen
+    "‒": "-",    # ‒ figure dash
+    "–": "-",    # – en dash
+    "—": "-",    # — em dash
+    "−": "-",    # − minus sign
+    "⸗": "-",    # ⸗ double oblique hyphen
     # Quote variants
     "«": '"',
     "»": '"',
-    "“": '"',
-    "”": '"',
+    "“": '"',   # "
+    "”": '"',   # "
     "„": '"',
-    "‟": '"',
-    "‹": "'",
-    "›": "'",
-    # Decorative symbols
+    "‟": '"',   # ‟
+    "‹": "'",    # ‹
+    "›": "'",    # ›
+    # Symbols and operators — delete; do not convert to lexical material.
+    "₌": None,   # ₌ subscript equals sign
+    "≠": None,   # ≠ not equal to
+    "≮": None,   # ≮ not less-than
+    "≯": None,   # ≯ not greater-than
+    # Decorative / replacement
     "™": None,
-    # Explicitly remove replacement character if present
+    "®": None,
+    "©": None,
+    "°": None,
+    "§": None,
+    "†": None,
+    "‡": None,
+    "•": None,
+    "·": None,
+    "…": None,
+    # Replacement character
     "�": None,
 }
 

@@ -11,7 +11,7 @@ import re
 import sys
 from collections import Counter
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any, Iterable, List, Optional
 from urllib.parse import urlparse
 
 from smart_open import open as smart_open  # type: ignore
@@ -64,14 +64,14 @@ def expand_inputs(inputs: list[str], prefixes: list[str], suffix: str) -> list[s
 
 def load_vocab(path: str) -> set[str]:
     """Load vocabulary from a TSV file (first column only)."""
-    log.info(f"Loading vocabulary from {path}")
+    log.info("Loading vocabulary from %s", path)
     vocab: set[str] = set()
     with smart_open(path, "r", encoding="utf-8", transport_params=get_transport_params(path)) as handle:
         for line in handle:
             lemma = line.strip().split("\t", 1)[0]
             if lemma:
                 vocab.add(lemma.lower())
-    log.info(f"Loaded {len(vocab):,} unique lemmas")
+    log.info("Loaded %s unique lemmas", format(len(vocab), ","))
     return vocab
 
 
@@ -133,7 +133,7 @@ def extract_doc_lemmas(
     return lemmas
 
 
-def main() -> int:
+def main(args: Optional[List[str]] = None) -> int:
     parser = argparse.ArgumentParser(
         description="Create eligible MALLET TSV rows from lingproc JSONL files."
     )
@@ -173,11 +173,9 @@ def main() -> int:
         choices=["DEBUG", "INFO", "WARNING", "ERROR"],
         help="Logging level (default: %(default)s)",
     )
-    args = parser.parse_args()
-    
-    # Setup logging
+    args = parser.parse_args(args)
     setup_logging(args.log_level, args.log_file, logger=log)
-    log.info(f"Arguments: {args}")
+    log.info("%s", args)
 
     inputs = expand_inputs(args.input, args.s3_prefix, args.input_suffix)
     if not inputs:
@@ -189,7 +187,7 @@ def main() -> int:
         args.stats_output, force_s3_overwrite=args.force_s3_overwrite
     )
 
-    log.info(f"Processing {len(inputs)} input file(s)")
+    log.info("Processing %d input file(s)", len(inputs))
 
     vocab = load_vocab(args.vocab)
     normalizer = None
@@ -200,19 +198,19 @@ def main() -> int:
             min_alpha=args.min_lemma_length,
         )
     pos_tags = {tag.strip() for tag in args.pos_tags.split(",") if tag.strip()}
-    log.info(f"Filtering for POS tags: {sorted(pos_tags)}")
-    log.info(f"Language: {args.language}")
-    log.info(f"Min lemma length: {args.min_lemma_length}")
-    log.info(f"Min vocab tokens: {args.min_vocab_tokens}, Max tokens: {args.max_tokens}")
+    log.info("Filtering for POS tags: %s", sorted(pos_tags))
+    log.info("Language: %s", args.language)
+    log.info("Min lemma length: %d", args.min_lemma_length)
+    log.info("Min vocab tokens: %d, Max tokens: %d", args.min_vocab_tokens, args.max_tokens)
 
     stats: Counter[str] = Counter()
     strata: Counter[str] = Counter()
 
-    log.info(f"Writing output to {args.output}")
+    log.info("Writing output to %s", args.output)
     with smart_open(args.output, "w", encoding="utf-8", transport_params=get_transport_params(args.output)) as out:
         for path in inputs:
             stats["input_files"] += 1
-            log.debug(f"Processing file {stats['input_files']}/{len(inputs)}: {path}")
+            log.debug("Processing file %d/%d: %s", stats["input_files"], len(inputs), path)
             with smart_open(path, "r", encoding="utf-8", transport_params=get_transport_params(path)) as handle:
                 for line_number, line in enumerate(handle, 1):
                     stats["input_lines"] += 1
@@ -220,13 +218,13 @@ def main() -> int:
                         doc = json.loads(line)
                     except json.JSONDecodeError as e:
                         stats["json_errors"] += 1
-                        log.debug(f"JSON decode error at {path}:{line_number}: {e}")
+                        log.debug("JSON decode error at %s:%d: %s", path, line_number, e)
                         continue
 
                     ci_id = str(doc.get("ci_id") or doc.get("id") or "")
                     if not ci_id:
                         stats["missing_ci_id"] += 1
-                        log.debug(f"Missing ci_id at {path}:{line_number}")
+                        log.debug("Missing ci_id at %s:%d", path, line_number)
                         continue
 
                     lemmas = extract_doc_lemmas(
@@ -242,9 +240,13 @@ def main() -> int:
                     stats["accepted_vocab_tokens"] += len(lemmas)
 
                     if stats["docs_seen"] % 10000 == 0:
-                        total_rejected = stats['rejected_too_short'] + stats['rejected_too_few_unique'] + stats['rejected_too_long']
-                        log.info(f"Progress: {stats['docs_seen']:,} documents processed, "
-                                f"{stats['docs_written']:,} written, {total_rejected:,} rejected")
+                        total_rejected = stats["rejected_too_short"] + stats["rejected_too_few_unique"] + stats["rejected_too_long"]
+                        log.info(
+                            "Progress: %s documents processed, %s written, %s rejected",
+                            format(stats["docs_seen"], ","),
+                            format(stats["docs_written"], ","),
+                            format(total_rejected, ","),
+                        )
 
                     unique_count = len(set(lemmas))
                     if len(lemmas) < args.min_vocab_tokens:
@@ -262,9 +264,13 @@ def main() -> int:
                     stats["docs_written"] += 1
                     out.write(f"{ci_id}\tDUMMY\t{' '.join(lemmas)}\n")
     
-    log.info(f"Processing complete: {stats['docs_seen']:,} documents processed, "
-            f"{stats['docs_written']:,} written, "
-            f"{stats['rejected_too_short'] + stats['rejected_too_few_unique'] + stats['rejected_too_long']:,} rejected")
+    total_rejected = stats["rejected_too_short"] + stats["rejected_too_few_unique"] + stats["rejected_too_long"]
+    log.info(
+        "Processing complete: %s documents processed, %s written, %s rejected",
+        format(stats["docs_seen"], ","),
+        format(stats["docs_written"], ","),
+        format(total_rejected, ","),
+    )
 
     metadata = {
         "created_at": get_timestamp(),
@@ -284,7 +290,7 @@ def main() -> int:
         "strata": dict(sorted(strata.items())),
     }
     
-    log.info(f"Writing statistics to {args.stats_output}")
+    log.info("Writing statistics to %s", args.stats_output)
     with smart_open(args.stats_output, "w", encoding="utf-8", transport_params=get_transport_params(args.stats_output)) as handle:
         json.dump(metadata, handle, ensure_ascii=False, indent=2, sort_keys=True)
         handle.write("\n")
@@ -297,5 +303,5 @@ if __name__ == "__main__":
     try:
         raise SystemExit(main())
     except Exception as e:
-        log.error(f"Fatal error: {e}", exc_info=True)
+        log.error("Fatal error: %s", e, exc_info=True)
         sys.exit(2)
