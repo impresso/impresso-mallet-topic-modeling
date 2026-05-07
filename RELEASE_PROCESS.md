@@ -230,12 +230,21 @@ This ensures the release notes are part of the exact commit that will be tagged.
 
 ### 2. Create Git Tag
 
+> **Note:** The tag should land on `main`. If you have been working on a
+> `version-X.Y` dev branch, merge it to `main` before tagging (or immediately
+> after, then re-tag on the resulting merge commit):
+>
+> ```bash
+> git checkout main
+> git merge --no-ff version-X.Y -m "Merge version-X.Y into main for release vX.Y.Z"
+> ```
+
 ```bash
-# Create an annotated tag
+# Create an annotated tag (on main)
 git tag -a v1.1.0 -m "Release v1.1.0: Description"
 
-# Push the tag
-git push origin v1.1.0
+# Push the branch and tag together
+git push origin main v1.1.0
 ```
 
 ### 3. Create GitHub Release
@@ -290,12 +299,12 @@ is to finalize and commit the release notes before creating the tag.
 
 ### 1. Update Main Branch
 
-Ensure `CHANGELOG.md` and any documentation updates are on the main branch:
+If the dev branch was not merged before tagging, merge it now and push:
 
 ```bash
 git checkout main
-git merge --no-ff release-branch
-git push origin main
+git merge --no-ff version-X.Y -m "Merge version-X.Y into main for release vX.Y.Z"
+git push origin main version-X.Y
 ```
 
 ### 2. Verify Configs Point to Released Model IDs
@@ -354,6 +363,7 @@ Use this checklist when preparing a release:
 - [ ] Version numbers are updated where needed
 - [ ] `RELEASE_NOTES_vX.Y.Z.md` is written before tagging
 - [ ] Release notes are committed on the release commit
+- [ ] Dev branch merged to `main` and tag is on `main`
 - [ ] Git tag is created
 - [ ] GitHub release is created from the committed release notes file
 - [ ] Release notes follow the template
