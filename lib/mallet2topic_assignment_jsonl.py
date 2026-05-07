@@ -3,10 +3,28 @@
 import logging
 import argparse
 import math
-import json
+try:
+    import ujson as json  # type: ignore
+except ImportError:
+    import json
 import re
 import collections
+
+from dotenv import load_dotenv
 from smart_open import open
+from impresso_cookbook import get_transport_params, setup_logging  # type: ignore
+
+log = logging.getLogger(__name__)
+
+# Load S3 credentials from .env file at module level
+load_dotenv()
+
+
+CI_REF_RE = re.compile(r"^(.+?/)?([^/]+?-\d{4}-\d{2}-\d{2}-\w-i\d{4})[^/]*$")
+
+
+def normalize_ci_ref(value):
+    return re.sub(CI_REF_RE, r"\2", value)
 
 
 def read_tsv_generator(filename):
@@ -20,13 +38,36 @@ def read_tsv_generator(filename):
         list: A list of values from each non-comment line in the TSV file.
     """
     line_count = 0
-    with open(filename, "r", encoding="utf-8") as file:
+    with open(filename, "r", encoding="utf-8", transport_params=get_transport_params(filename)) as file:
         for line in file:
             line_count += 1
             if not line.startswith("#"):
                 yield line.strip().split("\t")
             if line_count % 1000 == 0:
-                logging.info(f"Processed {line_count} lines.")
+                log.info("Processed %d lines.", line_count)
+
+
+def read_text_by_ci_ref(filename):
+    text_by_ci_ref = {}
+    for row in read_tsv_generator(filename):
+        if len(row) < 3:
+            continue
+        text_by_ci_ref[normalize_ci_ref(row[0])] = row[2]
+    return text_by_ci_ref
+
+
+def read_topic_words(filename, word_count=4):
+    words_by_topic = {}
+    for row in read_tsv_generator(filename):
+        if len(row) < 3:
+            continue
+        try:
+            topic_id = int(row[0])
+        except ValueError:
+            log.warning("Skipping topickeys row with non-numeric topic id: %s", row)
+            continue
+        words_by_topic[topic_id] = row[2].split()[:word_count]
+    return words_by_topic
 
 
 def format_topic_id(tpid, topic_model, lang, topic_count, separator="_"):
@@ -46,28 +87,31 @@ def format_topic_id(tpid, topic_model, lang, topic_count, separator="_"):
     return f"{topic_model}{separator}tp{tpid:0{math.ceil(math.log10(topic_count))}d}{separator}{lang}"
 
 
-def parse_matrix_file(row, eps, lang, topic_model, numeric_topic_ids):
-    ci_ref = re.sub(
-        r"^(.+?/)?([^/]+?-\d{4}-\d{2}-\d{2}-\w-i\d{4})[^/]*$", r"\2", row[1]
-    )
+def topic_entry(topic_id, probability, eps, lang, topic_model, topic_count, numeric_topic_ids, topic_words):
+    entry = {
+        "t": (
+            topic_id
+            if numeric_topic_ids
+            else format_topic_id(topic_id, topic_model, lang, topic_count)
+        ),
+        "p": round(probability, math.ceil(abs(math.log10(eps))) + 1),
+    }
+    if topic_words is not None:
+        entry["words"] = topic_words.get(topic_id, [])
+    return entry
+
+
+def parse_matrix_file(row, eps, lang, topic_model, numeric_topic_ids, topic_words=None):
+    ci_ref = normalize_ci_ref(row[1])
 
     topics = row[2:]
     topic_count = len(topics)
-    if numeric_topic_ids:
-        topics = [
-            {"t": t, "p": round(fp, math.ceil(abs(math.log10(eps))) + 1)}
-            for t, p in enumerate(topics)
-            if (fp := float(p)) >= eps
-        ]
-    else:
-        topics = [
-            {
-                "t": format_topic_id(t, topic_model, lang, topic_count),
-                "p": round(fp, math.ceil(abs(math.log10(eps))) + 1),
-            }
-            for t, p in enumerate(topics)
-            if (fp := float(p)) >= eps
-        ]
+    topics = [
+        topic_entry(t, fp, eps, lang, topic_model, topic_count, numeric_topic_ids, topic_words)
+        for t, p in enumerate(topics)
+        if (fp := float(p)) >= eps
+    ]
+    topics.sort(key=lambda topic: topic["p"], reverse=True)
 
     return {
         "topic_model": topic_model,
@@ -79,34 +123,41 @@ def parse_matrix_file(row, eps, lang, topic_model, numeric_topic_ids):
     }
 
 
-def parse_sparse_file(row, eps, lang, topic_model, numeric_topic_ids, topic_count=None):
-    ci_ref = re.sub(
-        r"^(.+?/)?([^/]+?-\d{4}-\d{2}-\d{2}-\w-i\d{4})[^/]*$", r"\2", row[1]
-    )
+def parse_sparse_file(
+    row,
+    eps,
+    lang,
+    topic_model,
+    numeric_topic_ids,
+    topic_count=None,
+    topic_words=None,
+):
+    ci_ref = normalize_ci_ref(row[1])
 
     topic_pairs = row[2:]
     topics = []
+    inferred_topic_count = topic_count or len(topic_pairs) // 2
     for i in range(0, len(topic_pairs), 2):
         t = int(topic_pairs[i])
         p = float(topic_pairs[i + 1])
         if p >= eps:
-            if numeric_topic_ids:
-                topics.append(
-                    {"t": t, "p": round(p, math.ceil(abs(math.log10(eps))) + 1)}
+            topics.append(
+                topic_entry(
+                    t,
+                    p,
+                    eps,
+                    lang,
+                    topic_model,
+                    inferred_topic_count,
+                    numeric_topic_ids,
+                    topic_words,
                 )
-            else:
-                topics.append(
-                    {
-                        "t": format_topic_id(
-                            t, topic_model, lang, len(topic_pairs) // 2
-                        ),
-                        "p": round(p, math.ceil(abs(math.log10(eps))) + 1),
-                    }
-                )
+            )
+    topics.sort(key=lambda topic: topic["p"], reverse=True)
 
     return {
         "topic_model": topic_model,
-        "topic_count": topic_count,
+        "topic_count": inferred_topic_count,
         "lang": lang,
         "ci_ref": ci_ref,
         "topics": topics,
@@ -122,6 +173,8 @@ def parse_mallet_file(
     numeric_topic_ids=False,
     format_type="matrix",
     topic_count=None,
+    text_by_ci_ref=None,
+    topic_words=None,
 ):
     """
     Process the Mallet topic word weights file and yield topic assignments in JSON format.
@@ -140,22 +193,39 @@ def parse_mallet_file(
     ci_ref_stats = collections.Counter()
 
     for row in read_tsv_generator(filename):
-        ci_ref = re.sub(
-            r"^(.+?/)?([^/]+?-\d{4}-\d{2}-\d{2}-\w-i\d{4})[^/]*$", r"\2", row[1]
-        )
+        ci_ref = normalize_ci_ref(row[1])
         if ci_ref in ci_ref_stats:
             ci_ref_stats["DUPLICATE_COUNT"] += 1
             continue
         ci_ref_stats[ci_ref] = 1
 
         if format_type == "matrix":
-            yield parse_matrix_file(row, eps, lang, topic_model, numeric_topic_ids)
-        elif format_type == "sparse":
-            yield parse_sparse_file(
-                row, eps, lang, topic_model, numeric_topic_ids, topic_count=topic_count
+            assignment = parse_matrix_file(
+                row,
+                eps,
+                lang,
+                topic_model,
+                numeric_topic_ids,
+                topic_words=topic_words,
             )
+        elif format_type == "sparse":
+            assignment = parse_sparse_file(
+                row,
+                eps,
+                lang,
+                topic_model,
+                numeric_topic_ids,
+                topic_count=topic_count,
+                topic_words=topic_words,
+            )
+        else:
+            continue
 
-    logging.info("DUPLICATE-COUNT: %d", ci_ref_stats["DUPLICATE_COUNT"])
+        if text_by_ci_ref is not None:
+            assignment["original_text"] = text_by_ci_ref.get(ci_ref)
+        yield assignment
+
+    log.info("DUPLICATE-COUNT: %d", ci_ref_stats["DUPLICATE_COUNT"])
 
 
 def process_file(options):
@@ -165,6 +235,14 @@ def process_file(options):
     Args:
         options (argparse.Namespace): Command line arguments.
     """
+    text_by_ci_ref = (
+        read_text_by_ci_ref(options.text_tsv) if options.text_tsv else None
+    )
+    topic_words = (
+        read_topic_words(options.topic_keys, word_count=options.topic_key_word_count)
+        if options.topic_keys
+        else None
+    )
     for topic_assignment in parse_mallet_file(
         options.args[0],
         eps=options.topic_assignment_threshold,
@@ -173,21 +251,10 @@ def process_file(options):
         numeric_topic_ids=options.numeric_topic_ids,
         format_type=options.format_type,
         topic_count=options.topic_count,
+        text_by_ci_ref=text_by_ci_ref,
+        topic_words=topic_words,
     ):
         print(json.dumps(topic_assignment, ensure_ascii=False, separators=(",", ":")))
-
-
-def setup_logging(options):
-    """
-    Set up logging configuration based on command line options.
-
-    Args:
-        options (argparse.Namespace): Command line arguments.
-    """
-    log_level = logging.DEBUG if options.debug else logging.INFO
-    logging.basicConfig(
-        level=log_level, filename=options.logfile if options.logfile else None
-    )
 
 
 def main():
@@ -201,7 +268,20 @@ def main():
     )
 
     parser.add_argument("--version", action="version", version="0.99")
-    parser.add_argument("-l", "--logfile", help="Write log to FILE", metavar="FILE")
+    parser.add_argument(
+        "-l",
+        "--logfile",
+        "--log-file",
+        dest="log_file",
+        help="Write log to FILE",
+        metavar="FILE",
+    )
+    parser.add_argument(
+        "--log-level",
+        default="INFO",
+        choices=["DEBUG", "INFO", "WARNING", "ERROR"],
+        help="Logging level (default: %(default)s)",
+    )
     parser.add_argument(
         "-q",
         "--quiet",
@@ -246,6 +326,20 @@ def main():
             " the file"
         ),
     )
+    parser.add_argument(
+        "--text-tsv",
+        help="Optional TSV with document id in column 1 and original text in column 3.",
+    )
+    parser.add_argument(
+        "--topic-keys",
+        help="Optional MALLET topic keys file used to add top words to each topic.",
+    )
+    parser.add_argument(
+        "--topic-key-word-count",
+        type=int,
+        default=4,
+        help="Number of top words to include per topic when --topic-keys is provided.",
+    )
     parser.add_argument("args", nargs="*")
 
     options = parser.parse_args()
@@ -253,12 +347,14 @@ def main():
         parser.error(
             "The --topic_count option is required when using the 'sparse' format"
         )
-    setup_logging(options)
+    log_level = "DEBUG" if options.debug else options.log_level
+    setup_logging(log_level, options.log_file, logger=log)
+    log.info("%s", options)
 
     try:
         process_file(options)
     except Exception as e:
-        logging.error("Processing failed: %s", e)
+        log.error("Processing failed: %s", e, exc_info=True)
         if options.debug:
             raise
 
