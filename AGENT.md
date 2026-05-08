@@ -35,7 +35,11 @@ outputs produced here.
   `venv/` directory.
 - Dependencies are declared in `Pipfile`; `impresso-cookbook` is installed
   editable from `./cookbook/lib`.
-- MALLET requires Java. The executable is `./mallet/bin/mallet`.
+- MALLET requires Java. The MALLET binary is controlled by the `MALLET` Makefile
+  variable (default: `./mallet/bin/mallet`). Versioned distributions live in
+  `mallet-X.Y.Z/` directories; configs pin the version via `MALLET ?= ./mallet-X.Y.Z/bin/mallet`.
+  Both `MEMORY` (2.0.8) and `MALLET_MEMORY` (2.1.0) env vars are set for every
+  MALLET invocation so either version picks up the correct heap size.
 - Many commands require S3 access and local AWS credentials through the cookbook
   setup.
 

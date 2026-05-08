@@ -64,6 +64,10 @@ TOPIC_TRAIN_SAMPLE_STRATA ?= newspaper,decade
 TOPIC_TRAIN_SAMPLE_MIN_PER_STRATUM ?= 0
 TOPIC_TRAIN_SAMPLE_MAX_PER_STRATUM ?=
 
+# MALLET binary. Default points to the legacy 2.0.8 distribution committed at mallet/.
+# Override in a config with: MALLET ?= ./mallet-X.Y.Z/bin/mallet
+# All MALLET invocations set both MEMORY (2.0.8) and MALLET_MEMORY (2.1.0) so
+# either version picks up the correct heap size.
 MALLET ?= ./mallet/bin/mallet
 MALLET_NUM_TOPICS ?= 1000
 MALLET_TRAIN_ITERATIONS ?= 1000

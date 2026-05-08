@@ -16,11 +16,20 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
   long-s (ſ→s), ß→ss; operators and decorative symbols deleted, not converted to
   lexical material.
 - **v3.0 training configs** for all four languages (`de`, `en`, `fr`, `lb`) under
-  `configs/config-topic-training-tm-{lang}-all-v3.0.mk`.
+  `configs/config-topic-training-tm-{lang}-all-v3.0.mk`. Each config pins the
+  MALLET binary version via `MALLET ?= ./mallet-2.1.0/bin/mallet`.
 - **v3.0 exclude-vocab placeholder files** under `resources/exclude-vocab/` for all
   languages (to be replaced with corpus-derived word lists after the first eligible run).
-- **`topic-training-prepares` and `topic-training-alls` Makefile targets**: run the
-  full prepare or training pipeline for all `TOPIC_TRAIN_LANGS` sequentially.
+- **`scripts/prepare-v3.0.0.sh`**: runs `topic-training-prepare-<lang>` for all four
+  languages sequentially, with per-language log files under `logs/`.
+- **`scripts/train-v3.0.0.sh`**: runs `topic-training-all-<lang>` for all four
+  languages sequentially, with per-language log files under `logs/`.
+- **`MALLET_MEMORY` env var support**: all MALLET invocations now set both `MEMORY`
+  (read by MALLET 2.0.8) and `MALLET_MEMORY` (read by MALLET 2.1.0).
+- **MALLET binary recorded in training metadata**: the `binary` field is written to
+  `metadata/{lang}.training.json`, making the exact MALLET version traceable.
+- **MALLET 2.1.0** distribution added at `mallet-2.1.0/` (JARs: `mallet-2.1.0.jar`,
+  `hppc-0.8.1.jar`).
 - **`COLLECTION_JOBS`/`MAX_LOAD` forwarding** in `topic-training-prepare-%` and
   `topic-training-all-%`: the internal GNU parallel load cap is now always inherited by
   sub-make calls to `topic-training-eligible-%`.
@@ -37,11 +46,13 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 - Training configs renamed from `v2.2` to `v3.0`; old `v2.2` configs removed.
 - `fr` config: removed empty `TOPIC_TRAIN_ADDITIONAL_EXCLUDE_VOCAB_fr +=` line
   (non-words list no longer needed with normalization pipeline).
-- `AGENT.md`: config filename and `remake` example updated to v3.0.
+- `AGENT.md`: config filename, `remake` example, and MALLET versioning convention updated.
 
 ### Removed
 
 - `configs/config-topic-training-tm-{de,en,fr,lb}-all-v2.2.mk` (superseded by v3.0 configs).
+- `topic-training-prepares` and `topic-training-alls` Makefile aggregate targets
+  (misleading: each language requires a different config; replaced by `scripts/` wrappers).
 
 ## [2.2.0] - 2026-03-01
 
