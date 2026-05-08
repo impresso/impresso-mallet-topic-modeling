@@ -71,6 +71,9 @@ TOPIC_TRAIN_SAMPLE_STRATA ?= newspaper,decade
 TOPIC_TRAIN_SAMPLE_MIN_PER_STRATUM ?= 0
 TOPIC_TRAIN_SAMPLE_MAX_PER_STRATUM ?= 10000
 
+# MALLET binary (version-pinned per training run).
+MALLET ?= ./mallet-2.1.0/bin/mallet
+
 # MALLET training hyperparameters.
 MALLET_NUM_TOPICS ?= 100
 MALLET_TRAIN_ITERATIONS ?= 2000

@@ -364,7 +364,7 @@ topic-training-import-%: FORCE
 		echo "Using existing local MALLET sample: $(call topic_train_sample_mallet_local,$*)"; \
 	else \
 		$(PYTHON) lib/copy_uri.py --force-s3-overwrite $(TOPIC_TRAIN_FORCE_S3_OVERWRITE) $(call topic_train_sample_s3,$*) $(call topic_train_sample_local,$*) && \
-		MEMORY=$(MALLET_STD_MEMORY) $(MALLET) import-file \
+		MEMORY=$(MALLET_STD_MEMORY) MALLET_MEMORY=$(MALLET_STD_MEMORY) $(MALLET) import-file \
 			--input $(call topic_train_sample_local,$*) \
 			--output $(call topic_train_sample_mallet_local,$*) \
 			--keep-sequence; \
@@ -373,7 +373,7 @@ topic-training-import-%: FORCE
 
 topic-training-train-%: topic-training-import-% FORCE
 	@mkdir -p $(LOCAL_TOPIC_TRAIN_BASE_PATH)/models $(LOCAL_TOPIC_TRAIN_BASE_PATH)/metadata
-	set -o pipefail; MEMORY=$(MALLET_TRAIN_MEMORY) $(MALLET) train-topics \
+	set -o pipefail; MEMORY=$(MALLET_TRAIN_MEMORY) MALLET_MEMORY=$(MALLET_TRAIN_MEMORY) $(MALLET) train-topics \
 		--input $(call topic_train_sample_mallet_local,$*) \
 		--output-model $(call topic_train_model_local,$*) \
 		--inferencer-filename $(call topic_train_inferencer_local,$*) \
@@ -386,7 +386,7 @@ topic-training-train-%: topic-training-import-% FORCE
 		--optimize-interval $(MALLET_OPTIMIZE_INTERVAL) \
 		--num-threads $(MALLET_THREADS) \
 		--random-seed $(MALLET_RANDOM_SEED) 2>&1 | tee $(call topic_train_model_log_local,$*)
-	$(PYTHON) -c 'import json, datetime; data={"run_id":"$(TOPIC_TRAIN_RUN_ID)","language":"$*","created_at":datetime.datetime.now(datetime.timezone.utc).isoformat(),"mallet":{"num_topics":$(MALLET_NUM_TOPICS),"train_iterations":$(MALLET_TRAIN_ITERATIONS),"optimize_interval":$(MALLET_OPTIMIZE_INTERVAL),"threads":$(MALLET_THREADS),"random_seed":$(MALLET_RANDOM_SEED),"output_doc_topics":"$(TOPIC_TRAIN_OUTPUT_DOC_TOPICS)"},"vocab":"$(call topic_train_vocab_s3,$*)","sample":"$(call topic_train_sample_s3,$*)"}; open("$(call topic_train_metadata_local,$*)","w").write(json.dumps(data, indent=2, sort_keys=True)+"\n")'
+	$(PYTHON) -c 'import json, datetime; data={"run_id":"$(TOPIC_TRAIN_RUN_ID)","language":"$*","created_at":datetime.datetime.now(datetime.timezone.utc).isoformat(),"mallet":{"binary":"$(MALLET)","num_topics":$(MALLET_NUM_TOPICS),"train_iterations":$(MALLET_TRAIN_ITERATIONS),"optimize_interval":$(MALLET_OPTIMIZE_INTERVAL),"threads":$(MALLET_THREADS),"random_seed":$(MALLET_RANDOM_SEED),"output_doc_topics":"$(TOPIC_TRAIN_OUTPUT_DOC_TOPICS)"},"vocab":"$(call topic_train_vocab_s3,$*)","sample":"$(call topic_train_sample_s3,$*)"}; open("$(call topic_train_metadata_local,$*)","w").write(json.dumps(data, indent=2, sort_keys=True)+"\n")'
 	$(PYTHON) lib/copy_uri.py --force-s3-overwrite $(TOPIC_TRAIN_FORCE_S3_OVERWRITE) \
 		$(call topic_train_model_local,$*) $(call topic_train_model_s3,$*) \
 		$(call topic_train_model_log_local,$*) $(call topic_train_model_log_s3,$*) \
@@ -409,12 +409,12 @@ topic-training-describe-%: FORCE
 topic-training-smoke-infer-%: FORCE
 	@mkdir -p $(LOCAL_TOPIC_TRAIN_BASE_PATH)/smoke
 	head -n $(MALLET_SMOKE_DOCS) $(call topic_train_sample_local,$*) > $(call topic_train_smoke_sample_local,$*)
-	MEMORY=$(MALLET_STD_MEMORY) $(MALLET) import-file \
+	MEMORY=$(MALLET_STD_MEMORY) MALLET_MEMORY=$(MALLET_STD_MEMORY) $(MALLET) import-file \
 		--input $(call topic_train_smoke_sample_local,$*) \
 		--output $(call topic_train_smoke_mallet_local,$*) \
 		--keep-sequence \
 		--use-pipe-from $(call topic_train_sample_mallet_local,$*)
-	MEMORY=$(MALLET_STD_MEMORY) $(MALLET) infer-topics \
+	MEMORY=$(MALLET_STD_MEMORY) MALLET_MEMORY=$(MALLET_STD_MEMORY) $(MALLET) infer-topics \
 		--inferencer $(call topic_train_inferencer_local,$*) \
 		--input $(call topic_train_smoke_mallet_local,$*) \
 		--num-iterations $(MALLET_SMOKE_INFER_ITERATIONS) \
