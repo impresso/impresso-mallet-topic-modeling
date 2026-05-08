@@ -187,6 +187,7 @@ help-topic-training:
 	@echo "  make topic-training-smoke-infer-<lang>"
 	@echo "  make topic-training-publish-<lang>"
 	@echo "  make topic-training-all-<lang>"
+	@echo "  make topic-training-from-sample-<lang>  # sample + train + describe + smoke-infer (after prepare)"
 	@echo "  make check-topic-training-mallet"
 	@echo "S3 base: $(S3_TOPIC_TRAIN_BASE_PATH)"
 	@echo "Final base: $(S3_TOPIC_TRAIN_FINAL_BASE_PATH)"
@@ -463,6 +464,15 @@ topic-training-prepare-%: FORCE
 topic-training-all-%: FORCE
 	$(MAKE) topic-training-vocab-$*
 	$(MAKE) topic-training-eligible-$* COLLECTION_JOBS=$(COLLECTION_JOBS) MAX_LOAD=$(MAX_LOAD)
+	$(MAKE) topic-training-sample-$*
+	$(MAKE) topic-training-train-$*
+	$(MAKE) topic-training-describe-$*
+	$(MAKE) topic-training-smoke-infer-$*
+
+# topic-training-from-sample-% runs the training pipeline starting from the sampling step,
+# assuming vocab and eligible texts have already been produced by topic-training-prepare-%.
+# Use this instead of topic-training-all-% when re-running training after preparation.
+topic-training-from-sample-%: FORCE
 	$(MAKE) topic-training-sample-$*
 	$(MAKE) topic-training-train-$*
 	$(MAKE) topic-training-describe-$*

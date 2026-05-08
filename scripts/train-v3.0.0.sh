@@ -57,7 +57,7 @@ run_train() {
     echo "[$lang] log:      $logfile"
     echo "----------------------------------------"
 
-    make topic-training-all-"$lang" CFG="$cfg" "${extra_vars[@]}" \
+    make topic-training-from-sample-"$lang" CFG="$cfg" "${extra_vars[@]}" \
         > >(tee -a "$logfile") 2>&1
 
     echo "[$lang] finished: $(date)"
