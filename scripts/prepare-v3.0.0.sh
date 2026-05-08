@@ -47,9 +47,11 @@ run_prepare() {
     local lang="$1"
     local cfg="$2"
     local extra_vars=()
-    [[ -n "$COLLECTION_JOBS"    ]] && extra_vars+=("COLLECTION_JOBS=$COLLECTION_JOBS")
-    [[ -n "$MAX_LOAD"           ]] && extra_vars+=("MAX_LOAD=$MAX_LOAD")
-    [[ -n "$TOPIC_TRAIN_BUCKET" ]] && extra_vars+=("TOPIC_TRAIN_BUCKET=$TOPIC_TRAIN_BUCKET")-${lang}-${START_TS}.log"
+    [[ -n "$COLLECTION_JOBS"             ]] && extra_vars+=("COLLECTION_JOBS=$COLLECTION_JOBS")
+    [[ -n "$MAX_LOAD"                    ]] && extra_vars+=("MAX_LOAD=$MAX_LOAD")
+    [[ -n "$TOPIC_TRAIN_BUCKET"          ]] && extra_vars+=("TOPIC_TRAIN_BUCKET=$TOPIC_TRAIN_BUCKET")
+    [[ -n "$TOPIC_TRAIN_FORCE_S3_OVERWRITE" ]] && extra_vars+=("TOPIC_TRAIN_FORCE_S3_OVERWRITE=$TOPIC_TRAIN_FORCE_S3_OVERWRITE")
+    local logfile="logs/prepare-v3.0.0-${lang}-${START_TS}.log"
 
     echo ""
     echo "----------------------------------------"
