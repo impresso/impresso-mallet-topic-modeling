@@ -546,10 +546,23 @@ Version-specific training scripts in `scripts/` orchestrate all four language mo
 
 ### Step 1 — Preparation (vocab + eligible texts + diagnostics)
 
+The scripts accept environment variables to configure the run. Set them as needed before calling the script:
+
+| Variable                         | Description                                      | Default       |
+| -------------------------------- | ------------------------------------------------ | ------------- |
+| `TOPIC_TRAIN_BUCKET`             | S3 bucket for all training outputs               | set in config |
+| `TOPIC_TRAIN_FORCE_S3_OVERWRITE` | Overwrite existing S3 artifacts (`TRUE`/`FALSE`) | `FALSE`       |
+| `COLLECTION_JOBS`                | Parallel newspaper jobs per language             | `nproc/2`     |
+| `MAX_LOAD`                       | System load limit for GNU parallel               | `nproc`       |
+
 ```bash
+# Minimal
 ./scripts/prepare-v3.0.0.sh
-# Optional: control parallelism
-COLLECTION_JOBS=4 MAX_LOAD=8 ./scripts/prepare-v3.0.0.sh
+
+# With all variables
+TOPIC_TRAIN_BUCKET=132-component-final \
+  COLLECTION_JOBS=4 MAX_LOAD=8 \
+  ./scripts/prepare-v3.0.0.sh
 ```
 
 Logs are written to `logs/prepare-v3.0.0-<lang>-<timestamp>.log`.
@@ -570,9 +583,13 @@ make topic-training-vocab-de \
 ### Step 2 — Training (sample + MALLET import + train + describe + smoke-infer)
 
 ```bash
+# Minimal
 ./scripts/train-v3.0.0.sh
-# Optional: control parallelism (only affects the eligible step if it re-runs)
-COLLECTION_JOBS=4 MAX_LOAD=8 ./scripts/train-v3.0.0.sh
+
+# With all variables
+TOPIC_TRAIN_BUCKET=132-component-final \
+  COLLECTION_JOBS=4 MAX_LOAD=8 \
+  ./scripts/train-v3.0.0.sh
 ```
 
 Logs are written to `logs/train-v3.0.0-<lang>-<timestamp>.log`.

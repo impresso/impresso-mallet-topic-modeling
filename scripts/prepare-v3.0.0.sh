@@ -8,6 +8,13 @@
 # Usage:
 #   ./scripts/prepare-v3.0.0.sh
 #   COLLECTION_JOBS=4 MAX_LOAD=8 ./scripts/prepare-v3.0.0.sh
+#   TOPIC_TRAIN_BUCKET=132-component-final COLLECTION_JOBS=4 MAX_LOAD=8 ./scripts/prepare-v3.0.0.sh
+#
+# Environment variables (all optional):
+#   TOPIC_TRAIN_BUCKET            S3 bucket for training outputs (default set in config)
+#   TOPIC_TRAIN_FORCE_S3_OVERWRITE  Overwrite existing S3 artifacts (TRUE/FALSE, default FALSE)
+#   COLLECTION_JOBS               Number of parallel newspaper jobs (default: nproc/2)
+#   MAX_LOAD                      System load limit for GNU parallel (default: nproc)
 #
 # After this script completes, review the diagnostic output files:
 #   - topic-training-singleton-lemmas-<lang>
@@ -25,22 +32,24 @@ cd "$REPO_ROOT"
 
 COLLECTION_JOBS="${COLLECTION_JOBS:-}"
 MAX_LOAD="${MAX_LOAD:-}"
+TOPIC_TRAIN_BUCKET="${TOPIC_TRAIN_BUCKET:-}"
+TOPIC_TRAIN_FORCE_S3_OVERWRITE="${TOPIC_TRAIN_FORCE_S3_OVERWRITE:-}"
 
 mkdir -p logs
 START_TS="$(date +%Y%m%d-%H%M%S)"
 
 echo "========================================"
 echo "prepare-v3.0.0.sh  started: $(date)"
-echo "COLLECTION_JOBS=${COLLECTION_JOBS:-<default>}  MAX_LOAD=${MAX_LOAD:-<default>}"
+echo "COLLECTION_JOBS=${COLLECTION_JOBS:-<default>}  MAX_LOAD=${MAX_LOAD:-<default>}  TOPIC_TRAIN_BUCKET=${TOPIC_TRAIN_BUCKET:-<from config>}  FORCE_S3_OVERWRITE=${TOPIC_TRAIN_FORCE_S3_OVERWRITE:-FALSE}"
 echo "========================================"
 
 run_prepare() {
     local lang="$1"
     local cfg="$2"
     local extra_vars=()
-    [[ -n "$COLLECTION_JOBS" ]] && extra_vars+=("COLLECTION_JOBS=$COLLECTION_JOBS")
-    [[ -n "$MAX_LOAD"        ]] && extra_vars+=("MAX_LOAD=$MAX_LOAD")
-    local logfile="logs/prepare-v3.0.0-${lang}-${START_TS}.log"
+    [[ -n "$COLLECTION_JOBS"    ]] && extra_vars+=("COLLECTION_JOBS=$COLLECTION_JOBS")
+    [[ -n "$MAX_LOAD"           ]] && extra_vars+=("MAX_LOAD=$MAX_LOAD")
+    [[ -n "$TOPIC_TRAIN_BUCKET" ]] && extra_vars+=("TOPIC_TRAIN_BUCKET=$TOPIC_TRAIN_BUCKET")-${lang}-${START_TS}.log"
 
     echo ""
     echo "----------------------------------------"
