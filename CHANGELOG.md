@@ -7,6 +7,8 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [3.0.1] - 2026-05-09
+
 ### Added
 
 - Training publish now builds an inference-facing bundle under
