@@ -69,11 +69,22 @@ s3://.../{TRAIN_RUN_ID}/
   smoke/{lang}.doctopics
   smoke/{lang}.topic_assignment.jsonl.bz2
   metadata/{lang}.training.json
+  inference/models/tm/{model_id}.config.json
+  inference/models/tm/{model_id}.pipe
+  inference/models/tm/{model_id}.inferencer
+  inference/models/tm/{model_id}.vocab.tsv.bz2
+  inference/models/tm/{model_id}.char-normalization.json
+  inference/models/tm/{model_id}.topic_model_topic_description.jsonl.bz2
   logs/
 ```
 
 Large full-corpus `.txt`, `.mallet`, and `.doctopics` files are intentionally
 not produced by this repo.
+
+The `inference/models/tm/` directory is a flat inference bundle. It is generated
+from the training artifacts during publish and should be copied into the
+downstream inference repository without requiring that repository to understand
+the training layout.
 
 ## Make Decomposition
 
@@ -204,6 +215,25 @@ is part of the model contract for downstream consumers.
 
 The smoke test applies the inferencer to a small sample only. It verifies that
 the model artifacts are usable without attempting full-corpus inference.
+
+### 8. Inference Bundle
+
+Publishing also creates an inference-facing bundle:
+
+```text
+inference/models/tm/{model_id}.config.json
+inference/models/tm/{model_id}.pipe
+inference/models/tm/{model_id}.inferencer
+inference/models/tm/{model_id}.vocab.tsv.bz2
+inference/models/tm/{model_id}.char-normalization.json
+inference/models/tm/{model_id}.topic_model_topic_description.jsonl.bz2
+```
+
+The `.pipe` file is a slim MALLET `InstanceList` created from the training sample:
+it keeps the trained pipe/alphabet but only one instance. The config records
+MALLET 2.1.0, normalized-lemma preprocessing, expected lingproc S3 run path, and
+the sibling artifact filenames. The inference cookbook should use this config to
+choose the v3 preprocessing code path.
 
 ## Implementation Files
 

@@ -596,6 +596,22 @@ Logs are written to `logs/train-v3.0.0-<lang>-<timestamp>.log`.
 
 Make stamp files ensure already-completed steps are skipped on re-runs. To force a specific step to re-run, delete the corresponding stamp file in `build.d/`.
 
+### Step 3 — Build inference bundles
+
+After training has produced the model artifacts, build the flat inference bundles:
+
+```bash
+# All languages
+./scripts/build-inference-bundle-v3.0.0.sh
+
+# One language
+./scripts/build-inference-bundle-v3.0.0.sh lb
+```
+
+Logs are written to `logs/build-inference-bundle-v3.0.0-<lang>-<timestamp>.log`.
+The script requires Bash 4 or newer; on macOS, install a current Bash with
+Homebrew if `/bin/bash` is too old.
+
 ### Single-language runs
 
 You can also run individual make targets directly for one language at a time:
@@ -610,6 +626,27 @@ make topic-training-all-de CFG=configs/config-topic-training-tm-de-all-v3.0.mk
 # Publish after review
 make topic-training-publish-de CFG=configs/config-topic-training-tm-de-all-v3.0.mk
 ```
+
+Publishing also creates a flat inference bundle under:
+
+```text
+s3://<bucket>/topics-mallet/<run-id>/inference/models/tm/
+```
+
+For each language/model, the bundle contains:
+
+- `{model_id}.config.json`
+- `{model_id}.pipe`
+- `{model_id}.inferencer`
+- `{model_id}.vocab.tsv.bz2`
+- `{model_id}.char-normalization.json`
+- `{model_id}.topic_model_topic_description.jsonl.bz2`
+
+The generated config is the downstream inference contract. It records MALLET
+`2.1.0`, the normalized-lemma preprocessing mode, the expected lingproc S3
+run/path used for training, and the sibling artifact filenames. The `.pipe` file
+is a slim MALLET file derived from the training sample, retaining the pipe and
+alphabet without shipping the full sample.
 
 Run `make help-topic-training` to see all available targets.
 
