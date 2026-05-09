@@ -92,6 +92,14 @@ TOPIC_TRAIN_NEGATIVE_DOC_FREQ_MAX ?= 2
 TOPIC_TRAIN_DOC_FREQ_INCLUDE_DOCUMENT_IDS ?= false
 TOPIC_TRAIN_DOC_FREQ_PROGRESS_INTERVAL ?= 100000
 TOPIC_TRAIN_FORCE_S3_OVERWRITE ?= FALSE
+TOPIC_TRAIN_MALLET_VERSION ?= unknown
+TOPIC_TRAIN_MALLET_HOME ?= $(patsubst %/bin/mallet,%,$(MALLET))
+TOPIC_TRAIN_MALLET_RUNTIME ?= $(notdir $(TOPIC_TRAIN_MALLET_HOME))
+TOPIC_TRAIN_MALLET_JAVA_CLASSPATH ?= $(TOPIC_TRAIN_MALLET_HOME)/lib/*
+TOPIC_TRAIN_PREPROCESSING_MODE ?= normalized-lemma-vocab-v1
+TOPIC_TRAIN_INFERENCE_SCHEMA_VERSION ?= 3.0
+TOPIC_TRAIN_INFERENCE_BUNDLE_SUBDIR ?= inference/models/tm
+TOPIC_TRAIN_CONFIG_SOURCE ?= $(CONFIG_LOCAL_MAKE)
 
 topic_train_pre_norm_vocab_s3 = $(S3_TOPIC_TRAIN_BASE_PATH)/vocab/$(1).pre-norm.vocab.tsv.bz2
 topic_train_pre_norm_vocab_meta_s3 = $(S3_TOPIC_TRAIN_BASE_PATH)/vocab/$(1).pre-norm.vocab.metadata.json
@@ -131,6 +139,14 @@ topic_train_smoke_doctopics_local = $(LOCAL_TOPIC_TRAIN_BASE_PATH)/smoke/$(1).do
 topic_train_smoke_assignment_plain_local = $(LOCAL_TOPIC_TRAIN_BASE_PATH)/smoke/$(1).topic_assignment.jsonl
 topic_train_smoke_assignment_local = $(LOCAL_TOPIC_TRAIN_BASE_PATH)/smoke/$(1).topic_assignment.jsonl.bz2
 topic_train_metadata_local = $(LOCAL_TOPIC_TRAIN_BASE_PATH)/metadata/$(1).training.json
+topic_train_inference_bundle_local_dir = $(LOCAL_TOPIC_TRAIN_BASE_PATH)/$(TOPIC_TRAIN_INFERENCE_BUNDLE_SUBDIR)
+topic_train_inference_java_classes_local_dir = $(LOCAL_TOPIC_TRAIN_BASE_PATH)/java-classes
+topic_train_inference_config_local = $(call topic_train_inference_bundle_local_dir)/$(TOPIC_TRAIN_MODEL_ID).config.json
+topic_train_inference_pipe_local = $(call topic_train_inference_bundle_local_dir)/$(TOPIC_TRAIN_MODEL_ID).pipe
+topic_train_inference_inferencer_local = $(call topic_train_inference_bundle_local_dir)/$(TOPIC_TRAIN_MODEL_ID).inferencer
+topic_train_inference_vocab_local = $(call topic_train_inference_bundle_local_dir)/$(TOPIC_TRAIN_MODEL_ID).vocab.tsv.bz2
+topic_train_inference_char_normalization_local = $(call topic_train_inference_bundle_local_dir)/$(TOPIC_TRAIN_MODEL_ID).char-normalization.json
+topic_train_inference_description_local = $(call topic_train_inference_bundle_local_dir)/$(TOPIC_TRAIN_MODEL_ID).topic_model_topic_description.jsonl.bz2
 
 topic_train_model_s3 = $(S3_TOPIC_TRAIN_BASE_PATH)/models/$(1).model
 topic_train_model_log_s3 = $(S3_TOPIC_TRAIN_BASE_PATH)/models/$(1).model.log
@@ -156,9 +172,22 @@ topic_train_final_sample_doctopics_s3 = $(S3_TOPIC_TRAIN_FINAL_BASE_PATH)/models
 topic_train_final_description_s3 = $(S3_TOPIC_TRAIN_FINAL_BASE_PATH)/jsonl/$(1).topic_model_topic_description.jsonl.bz2
 topic_train_final_smoke_assignment_s3 = $(S3_TOPIC_TRAIN_FINAL_BASE_PATH)/smoke/$(1).topic_assignment.jsonl.bz2
 topic_train_final_metadata_s3 = $(S3_TOPIC_TRAIN_FINAL_BASE_PATH)/metadata/$(1).training.json
+topic_train_inference_bundle_s3_dir = $(S3_TOPIC_TRAIN_BASE_PATH)/$(TOPIC_TRAIN_INFERENCE_BUNDLE_SUBDIR)
+topic_train_final_inference_bundle_s3_dir = $(S3_TOPIC_TRAIN_FINAL_BASE_PATH)/$(TOPIC_TRAIN_INFERENCE_BUNDLE_SUBDIR)
+topic_train_inference_config_s3 = $(call topic_train_inference_bundle_s3_dir)/$(TOPIC_TRAIN_MODEL_ID).config.json
+topic_train_inference_pipe_s3 = $(call topic_train_inference_bundle_s3_dir)/$(TOPIC_TRAIN_MODEL_ID).pipe
+topic_train_inference_inferencer_s3 = $(call topic_train_inference_bundle_s3_dir)/$(TOPIC_TRAIN_MODEL_ID).inferencer
+topic_train_inference_vocab_s3 = $(call topic_train_inference_bundle_s3_dir)/$(TOPIC_TRAIN_MODEL_ID).vocab.tsv.bz2
+topic_train_inference_char_normalization_s3 = $(call topic_train_inference_bundle_s3_dir)/$(TOPIC_TRAIN_MODEL_ID).char-normalization.json
+topic_train_inference_description_s3 = $(call topic_train_inference_bundle_s3_dir)/$(TOPIC_TRAIN_MODEL_ID).topic_model_topic_description.jsonl.bz2
+topic_train_final_inference_config_s3 = $(call topic_train_final_inference_bundle_s3_dir)/$(TOPIC_TRAIN_MODEL_ID).config.json
+topic_train_final_inference_pipe_s3 = $(call topic_train_final_inference_bundle_s3_dir)/$(TOPIC_TRAIN_MODEL_ID).pipe
+topic_train_final_inference_inferencer_s3 = $(call topic_train_final_inference_bundle_s3_dir)/$(TOPIC_TRAIN_MODEL_ID).inferencer
+topic_train_final_inference_vocab_s3 = $(call topic_train_final_inference_bundle_s3_dir)/$(TOPIC_TRAIN_MODEL_ID).vocab.tsv.bz2
+topic_train_final_inference_char_normalization_s3 = $(call topic_train_final_inference_bundle_s3_dir)/$(TOPIC_TRAIN_MODEL_ID).char-normalization.json
+topic_train_final_inference_description_s3 = $(call topic_train_final_inference_bundle_s3_dir)/$(TOPIC_TRAIN_MODEL_ID).topic_model_topic_description.jsonl.bz2
 
 .NOTINTERMEDIATE: topic-training-import-% topic-training-train-% topic-training-describe-% topic-training-smoke-infer-%
-.SECONDARY: topic-training-import-% topic-training-train-% topic-training-describe-% topic-training-smoke-infer-%
 .PHONY: FORCE
 FORCE:
 
@@ -185,6 +214,7 @@ help-topic-training:
 	@echo "  make topic-training-train-<lang>"
 	@echo "  make topic-training-describe-<lang>"
 	@echo "  make topic-training-smoke-infer-<lang>"
+	@echo "  make topic-training-inference-bundle-<lang>"
 	@echo "  make topic-training-publish-<lang>"
 	@echo "  make topic-training-all-<lang>"
 	@echo "  make topic-training-from-sample-<lang>  # sample + train + describe + smoke-infer (after prepare)"
@@ -435,7 +465,58 @@ topic-training-smoke-infer-%: FORCE
 	bzip2 -f $(call topic_train_smoke_assignment_plain_local,$*)
 	$(PYTHON) lib/copy_uri.py --force-s3-overwrite $(TOPIC_TRAIN_FORCE_S3_OVERWRITE) $(call topic_train_smoke_assignment_local,$*) $(call topic_train_smoke_assignment_s3,$*)
 
+topic-training-inference-pipe-%: topic-training-import-% FORCE
+	@mkdir -p $(call topic_train_inference_bundle_local_dir) $(call topic_train_inference_java_classes_local_dir)
+	javac -cp "$(TOPIC_TRAIN_MALLET_JAVA_CLASSPATH)" \
+		-d $(call topic_train_inference_java_classes_local_dir) \
+		lib/CreateMinimalMalletFile.java
+	java -cp "$(call topic_train_inference_java_classes_local_dir):$(TOPIC_TRAIN_MALLET_JAVA_CLASSPATH)" \
+		CreateMinimalMalletFile \
+		$(call topic_train_sample_mallet_local,$*) \
+		$(call topic_train_inference_pipe_local)
+
+topic-training-inference-config-%: FORCE
+	@mkdir -p $(call topic_train_inference_bundle_local_dir)
+	$(PYTHON) lib/write_inference_model_config.py \
+		--output $(call topic_train_inference_config_local) \
+		--schema-version $(TOPIC_TRAIN_INFERENCE_SCHEMA_VERSION) \
+		--model-id $(TOPIC_TRAIN_MODEL_ID) \
+		--language $* \
+		--topic-count $(MALLET_NUM_TOPICS) \
+		--mallet-version $(TOPIC_TRAIN_MALLET_VERSION) \
+		--mallet-runtime $(TOPIC_TRAIN_MALLET_RUNTIME) \
+		--preprocessing-mode $(TOPIC_TRAIN_PREPROCESSING_MODE) \
+		--upos-filter $(TOPIC_TRAIN_POS_TAGS) \
+		--lowercase-token $(TOPIC_TRAIN_LOWERCASE_TOKEN) \
+		--min-lemma-length $(TOPIC_TRAIN_MIN_LEMMA_LENGTH) \
+		--min-vocab-tokens $(TOPIC_TRAIN_MIN_VOCAB_TOKENS) \
+		--min-unique-lemmas $(TOPIC_TRAIN_MIN_UNIQUE_LEMMAS) \
+		--include-titles $(TOPIC_TRAIN_INCLUDE_TITLES) \
+		--expected-lingproc-run-id $(RUN_ID_LINGPROC) \
+		--expected-lingproc-s3-base s3://$(PATH_LINGPROC_BASE) \
+		--config-source $(TOPIC_TRAIN_CONFIG_SOURCE) \
+		--inferencer $(notdir $(call topic_train_inference_inferencer_local)) \
+		--pipe $(notdir $(call topic_train_inference_pipe_local)) \
+		--vocab $(notdir $(call topic_train_inference_vocab_local)) \
+		--char-normalization $(notdir $(call topic_train_inference_char_normalization_local)) \
+		--topic-description $(notdir $(call topic_train_inference_description_local))
+
+topic-training-inference-bundle-%: topic-training-inference-pipe-% topic-training-inference-config-% FORCE
+	$(PYTHON) lib/copy_uri.py --force-s3-overwrite $(TOPIC_TRAIN_FORCE_S3_OVERWRITE) \
+		$(call topic_train_inferencer_s3,$*) $(call topic_train_inference_inferencer_local) \
+		$(call topic_train_vocab_s3,$*) $(call topic_train_inference_vocab_local) \
+		$(call topic_train_char_normalization_s3,$*) $(call topic_train_inference_char_normalization_local) \
+		$(call topic_train_description_s3,$*) $(call topic_train_inference_description_local)
+	$(PYTHON) lib/copy_uri.py --force-s3-overwrite $(TOPIC_TRAIN_FORCE_S3_OVERWRITE) \
+		$(call topic_train_inference_config_local) $(call topic_train_inference_config_s3) \
+		$(call topic_train_inference_pipe_local) $(call topic_train_inference_pipe_s3) \
+		$(call topic_train_inference_inferencer_local) $(call topic_train_inference_inferencer_s3) \
+		$(call topic_train_inference_vocab_local) $(call topic_train_inference_vocab_s3) \
+		$(call topic_train_inference_char_normalization_local) $(call topic_train_inference_char_normalization_s3) \
+		$(call topic_train_inference_description_local) $(call topic_train_inference_description_s3)
+
 topic-training-publish-%: FORCE
+	$(MAKE) topic-training-inference-bundle-$*
 	$(PYTHON) lib/copy_uri.py --force-s3-overwrite $(TOPIC_TRAIN_FORCE_S3_OVERWRITE) \
 		$(call topic_train_vocab_s3,$*) $(call topic_train_final_vocab_s3,$*) \
 		$(call topic_train_vocab_meta_s3,$*) $(call topic_train_final_vocab_meta_s3,$*) \
@@ -449,6 +530,13 @@ topic-training-publish-%: FORCE
 		$(call topic_train_description_s3,$*) $(call topic_train_final_description_s3,$*) \
 		$(call topic_train_smoke_assignment_s3,$*) $(call topic_train_final_smoke_assignment_s3,$*) \
 		$(call topic_train_metadata_s3,$*) $(call topic_train_final_metadata_s3,$*)
+	$(PYTHON) lib/copy_uri.py --force-s3-overwrite $(TOPIC_TRAIN_FORCE_S3_OVERWRITE) \
+		$(call topic_train_inference_config_s3) $(call topic_train_final_inference_config_s3) \
+		$(call topic_train_inference_pipe_s3) $(call topic_train_final_inference_pipe_s3) \
+		$(call topic_train_inference_inferencer_s3) $(call topic_train_final_inference_inferencer_s3) \
+		$(call topic_train_inference_vocab_s3) $(call topic_train_final_inference_vocab_s3) \
+		$(call topic_train_inference_char_normalization_s3) $(call topic_train_final_inference_char_normalization_s3) \
+		$(call topic_train_inference_description_s3) $(call topic_train_final_inference_description_s3)
 
 # topic-training-prepare-% runs the full preparation pipeline up to and including diagnostic
 # analysis of rare lemmas. After this target completes, review the word lists produced by

@@ -73,6 +73,7 @@ TOPIC_TRAIN_SAMPLE_MAX_PER_STRATUM ?= 10000
 
 # MALLET binary (version-pinned per training run).
 MALLET ?= ./mallet-2.1.0/bin/mallet
+TOPIC_TRAIN_MALLET_VERSION ?= 2.1.0
 
 # MALLET training hyperparameters.
 MALLET_NUM_TOPICS ?= 100

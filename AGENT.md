@@ -108,8 +108,18 @@ The expected artifact families include:
 - `jsonl/{lang}.topic_model_topic_description.jsonl.bz2`
 - `smoke/{lang}.*`
 - `metadata/{lang}.training.json`
+- `inference/models/tm/{model_id}.config.json`
+- `inference/models/tm/{model_id}.pipe`
+- `inference/models/tm/{model_id}.inferencer`
+- `inference/models/tm/{model_id}.vocab.tsv.bz2`
+- `inference/models/tm/{model_id}.char-normalization.json`
+- `inference/models/tm/{model_id}.topic_model_topic_description.jsonl.bz2`
 
 Do not add full-corpus inference outputs to this repository's training contract.
+
+The `inference/models/tm/` bundle is the downstream inference contract. Its
+config records the MALLET runtime version, preprocessing mode, expected
+linguistic-processing run path, and sibling artifact filenames.
 
 ## Python Conventions
 

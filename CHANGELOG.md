@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+## [3.0.1] - 2026-05-09
+
+### Added
+
+- Training publish now builds an inference-facing bundle under
+  `inference/models/tm/`, including a generated model config, slim MALLET `.pipe`,
+  inferencer, normalized vocab, character normalization table, and topic
+  descriptions.
+- Generated inference configs record MALLET runtime version, normalized-lemma
+  preprocessing settings, expected linguistic-processing S3 run/path, and sibling
+  artifact filenames.
+- `scripts/build-inference-bundle-v3.0.0.sh` wraps the post-training inference
+  bundle build for one or more languages.
+
 ## [3.0.0] - 2026-05-08
 
 ### Added
