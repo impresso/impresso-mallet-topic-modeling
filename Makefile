@@ -85,6 +85,5 @@ help::
 	@echo "  make topic-training-eligible-newspaper LNG=de NEWSPAPER=BL/AATA"
 	@echo "  make topic-training-sample-<lang> # Create stratified sample"
 	@echo "  make topic-training-train-<lang>  # Train MALLET model"
-	@echo ""
-	@echo "Note: Use 'remake' instead of 'make' when running locally on macOS."
+	@echo "  make topic-training-label-<lang>  # Generate topic labels from S3 topic descriptions"
 	@echo ""

@@ -6,6 +6,7 @@ import gzip
 import json
 import logging
 import sys
+import unicodedata
 from collections import Counter
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
@@ -254,7 +255,9 @@ def build_prompt(topics: List[Dict[str, Any]], assigned_labels: List[Dict[str, s
         "7. Avoid over-specific labels based only on one or two named entities unless the whole topic clearly supports it.\n"
         "8. Preserve all topic_id values exactly.\n"
         "9. Make labels mutually distinct across the whole language model and avoid duplicates from already_assigned_labels.\n"
-        "10. Do not invent information not supported by the topic words.\n\n"
+        "10. Do not invent information not supported by the topic words.\n"
+        "11. representative_terms must be copied from the provided topic words, not paraphrased, translated, respelled, or accent-normalized.\n"
+        "12. If you think a concept is a multi-word phrase such as 'new york' or 'red boys', but the topic words list contains only separate tokens, return the separate tokens instead (for example ['new', 'york'] or ['red', 'boys']).\n\n"
         "Few-shot example 1:\n"
         "Topic words: bey, könig, nachricht, frankreich, stadt, tag, truppe, mann, general, armee, minister, kaiser, land, schiff, brief, paris, befehl\n"
         "Output label: Eighteenth-century political news; topic_type political_news; confidence high.\n\n"
@@ -331,6 +334,41 @@ def call_openai(prompt: str, model: str) -> Dict[str, Any]:
     return extract_response_json(response)
 
 
+def _term_key(term: str) -> str:
+    """Normalise a term for lookup: strip accents, collapse whitespace, lowercase."""
+    nfc = unicodedata.normalize("NFC", term)
+    without_accents = "".join(
+        ch for ch in unicodedata.normalize("NFKD", nfc) if not unicodedata.combining(ch)
+    )
+    return " ".join(without_accents.split()).lower()
+
+
+def _resolve_term(term: str, lookup: Dict[str, str]) -> Optional[str]:
+    """Return the canonical source form of *term*, or None if not found."""
+    return lookup.get(_term_key(term))
+
+
+def _resolve_representative_term(term: str, lookup: Dict[str, str]) -> Optional[List[str]]:
+    """Resolve one returned representative term to one or more canonical source terms.
+
+    If the returned term is multi-word and no exact normalized match exists, try the
+    whitespace-split parts separately so model outputs like "new york" can map to
+    ["new", "york"] when the topic vocabulary only contains single tokens.
+    """
+    resolved = _resolve_term(term, lookup)
+    if resolved is not None:
+        return [resolved]
+
+    pieces = term.split()
+    if len(pieces) <= 1:
+        return None
+
+    resolved_pieces = [_resolve_term(piece, lookup) for piece in pieces]
+    if any(piece is None for piece in resolved_pieces):
+        return None
+    return [piece for piece in resolved_pieces if piece is not None]
+
+
 def validate_labels(response: Dict[str, Any], topics: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     if not isinstance(response, dict):
         raise ValueError("Model response is not a JSON object")
@@ -345,7 +383,11 @@ def validate_labels(response: Dict[str, Any], topics: List[Dict[str, Any]]) -> L
             f"expected {expected_ids}, observed {observed_ids}"
         )
 
-    topic_terms_by_id = {topic["topic_id"]: set(topic["top_terms"]) for topic in topics}
+    # Single normalised lookup: _term_key(source_term) → canonical source term.
+    topic_terms_by_id: Dict[str, Dict[str, str]] = {
+        topic["topic_id"]: {_term_key(t): t for t in topic["top_terms"]}
+        for topic in topics
+    }
     validated = []
     for label in labels:
         topic_id = label["topic_id"]
@@ -366,10 +408,50 @@ def validate_labels(response: Dict[str, Any], topics: List[Dict[str, Any]]) -> L
         terms = label["representative_terms"]
         if not isinstance(terms, list) or not 5 <= len(terms) <= 10:
             raise ValueError(f"{topic_id} representative_terms must contain 5-10 terms")
-        invalid_terms = [term for term in terms if term not in topic_terms_by_id[topic_id]]
+        lookup = topic_terms_by_id[topic_id]
+        resolved_terms = [_resolve_representative_term(term, lookup) for term in terms]
+        invalid_terms = [
+            term for term, resolved in zip(terms, resolved_terms)
+            if resolved is None
+        ]
         if invalid_terms:
+            if log.isEnabledFor(logging.DEBUG):
+                for bad in invalid_terms:
+                    key = _term_key(bad)
+                    log.debug(
+                        "%s: unmatched term repr=%r  key=%r",
+                        topic_id, bad, key,
+                    )
+                    # Show any lookup keys that share a common prefix (first 4 chars) for clues.
+                    candidates = [k for k in lookup if k[:4] == key[:4]]
+                    for c in candidates:
+                        log.debug(
+                            "  candidate key=%r  source=%r",
+                            c, lookup[c],
+                        )
+                    if not candidates:
+                        log.debug("  (no candidate keys share the first 4 chars)")
+                    if len(bad.split()) > 1:
+                        log.debug("  split parts=%r", bad.split())
+                        for piece in bad.split():
+                            log.debug(
+                                "    part=%r  key=%r  resolved=%r",
+                                piece,
+                                _term_key(piece),
+                                _resolve_term(piece, lookup),
+                            )
             raise ValueError(
                 f"{topic_id} representative_terms not copied from topic words: {invalid_terms}"
+            )
+        # Resolve to the canonical source form so downstream consumers see consistent text.
+        canonical_terms = [
+            canonical
+            for resolved in resolved_terms
+            for canonical in (resolved or [])
+        ]
+        if not 5 <= len(canonical_terms) <= 10:
+            raise ValueError(
+                f"{topic_id} representative_terms resolve to {len(canonical_terms)} terms; expected 5-10 after splitting"
             )
         validated.append(
             {
@@ -379,7 +461,7 @@ def validate_labels(response: Dict[str, Any], topics: List[Dict[str, Any]]) -> L
                 "topic_type": label["topic_type"],
                 "confidence": label["confidence"],
                 "rationale": label["rationale"],
-                "representative_terms": terms,
+                "representative_terms": canonical_terms,
                 "generated_by": "OpenAI",
             }
         )
@@ -404,7 +486,12 @@ def label_batch(topics: List[Dict[str, Any]], assigned_labels: List[Dict[str, st
             prompt
             + "\n\nThe previous response failed validation:\n"
             + str(first_error)
-            + "\nReturn a corrected complete JSON object for this same batch."
+            + "\n\nRepair instructions:\n"
+            + "- representative_terms must be copied from the provided topic words only.\n"
+            + "- Do not translate, paraphrase, respell, or normalize accents in representative_terms.\n"
+            + "- If you used a multi-word phrase but the topic words contain only separate single-word tokens, replace the phrase with the separate tokens. Example: use ['new', 'york'] instead of ['new york']; use ['red', 'boys'] instead of ['red boys'].\n"
+            + "- If you used an accented or unaccented variant that is not literally in the topic words, replace it with the exact topic word spelling from the input.\n"
+            + "Return a corrected complete JSON object for this same batch."
         )
         repaired = call_openai(repair_prompt, model)
         labels = validate_labels(repaired, topics)

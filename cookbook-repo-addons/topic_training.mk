@@ -84,6 +84,11 @@ MALLET_TOPIC_ASSIGNMENT_THRESHOLD ?= 0.02
 TOPIC_TRAIN_SMOKE_VERBOSE ?= true
 TOPIC_TRAIN_WORD_THRESHOLD ?= 200
 TOPIC_TRAIN_OUTPUT_DOC_TOPICS ?= true
+TOPIC_TRAIN_LABEL_MODEL ?= gpt-5.5
+TOPIC_TRAIN_LABEL_TOP_TERMS ?= 50
+TOPIC_TRAIN_LABEL_MAX_PROMPT_CHARS ?= 120000
+TOPIC_TRAIN_LABEL_MAX_TOPICS_PER_BATCH ?= 0
+TOPIC_TRAIN_LABEL_MOCK_RESPONSE ?=
 # Upper bound on document frequency for rare-lemma diagnostics.
 # Lemmas appearing in *at most* this many documents are reported as singletons/rare.
 # Used as --max-document-frequency in analyze_doc_freq.py (not a minimum threshold).
@@ -156,6 +161,7 @@ topic_train_topickeys_s3 = $(S3_TOPIC_TRAIN_BASE_PATH)/models/$(1).topickeys
 topic_train_topicwordweights_s3 = $(S3_TOPIC_TRAIN_BASE_PATH)/models/$(1).topicwordweights
 topic_train_sample_doctopics_s3 = $(S3_TOPIC_TRAIN_BASE_PATH)/models/$(1).sample.doctopics
 topic_train_description_s3 = $(S3_TOPIC_TRAIN_BASE_PATH)/jsonl/$(1).topic_model_topic_description.jsonl.bz2
+topic_train_labels_s3 = $(S3_TOPIC_TRAIN_BASE_PATH)/jsonl/$(1).topic_labels.jsonl.gz
 topic_train_smoke_doctopics_s3 = $(S3_TOPIC_TRAIN_BASE_PATH)/smoke/$(1).doctopics
 topic_train_smoke_assignment_s3 = $(S3_TOPIC_TRAIN_BASE_PATH)/smoke/$(1).topic_assignment.jsonl.bz2
 topic_train_metadata_s3 = $(S3_TOPIC_TRAIN_BASE_PATH)/metadata/$(1).training.json
@@ -170,6 +176,7 @@ topic_train_final_topickeys_s3 = $(S3_TOPIC_TRAIN_FINAL_BASE_PATH)/models/$(1).t
 topic_train_final_topicwordweights_s3 = $(S3_TOPIC_TRAIN_FINAL_BASE_PATH)/models/$(1).topicwordweights
 topic_train_final_sample_doctopics_s3 = $(S3_TOPIC_TRAIN_FINAL_BASE_PATH)/models/$(1).sample.doctopics
 topic_train_final_description_s3 = $(S3_TOPIC_TRAIN_FINAL_BASE_PATH)/jsonl/$(1).topic_model_topic_description.jsonl.bz2
+topic_train_final_labels_s3 = $(S3_TOPIC_TRAIN_FINAL_BASE_PATH)/jsonl/$(1).topic_labels.jsonl.gz
 topic_train_final_smoke_assignment_s3 = $(S3_TOPIC_TRAIN_FINAL_BASE_PATH)/smoke/$(1).topic_assignment.jsonl.bz2
 topic_train_final_metadata_s3 = $(S3_TOPIC_TRAIN_FINAL_BASE_PATH)/metadata/$(1).training.json
 topic_train_inference_bundle_s3_dir = $(S3_TOPIC_TRAIN_BASE_PATH)/$(TOPIC_TRAIN_INFERENCE_BUNDLE_SUBDIR)
@@ -213,11 +220,12 @@ help-topic-training:
 	@echo "  make topic-training-import-<lang>"
 	@echo "  make topic-training-train-<lang>"
 	@echo "  make topic-training-describe-<lang>"
+	@echo "  make topic-training-label-<lang>"
 	@echo "  make topic-training-smoke-infer-<lang>"
 	@echo "  make topic-training-inference-bundle-<lang>"
 	@echo "  make topic-training-publish-<lang>"
 	@echo "  make topic-training-all-<lang>"
-	@echo "  make topic-training-from-sample-<lang>  # sample + train + describe + smoke-infer (after prepare)"
+	@echo "  make topic-training-from-sample-<lang>  # sample + train + describe + label + smoke-infer (after prepare)"
 	@echo "  make check-topic-training-mallet"
 	@echo "S3 base: $(S3_TOPIC_TRAIN_BASE_PATH)"
 	@echo "Final base: $(S3_TOPIC_TRAIN_FINAL_BASE_PATH)"
@@ -441,6 +449,19 @@ topic-training-describe-%: FORCE
 		$(call topic_train_topicwordweights_local,$*)
 	$(PYTHON) lib/copy_uri.py --force-s3-overwrite $(TOPIC_TRAIN_FORCE_S3_OVERWRITE) $(call topic_train_description_local,$*) $(call topic_train_description_s3,$*)
 
+topic-training-label-%: FORCE
+	$(PYTHON) lib/label_topics.py \
+		--input $(call topic_train_description_s3,$*) \
+		--output $(call topic_train_labels_s3,$*) \
+		--model $(TOPIC_TRAIN_LABEL_MODEL) \
+		--top-terms $(TOPIC_TRAIN_LABEL_TOP_TERMS) \
+		--max-prompt-chars $(TOPIC_TRAIN_LABEL_MAX_PROMPT_CHARS) \
+		--max-topics-per-batch $(TOPIC_TRAIN_LABEL_MAX_TOPICS_PER_BATCH) \
+		$(if $(TOPIC_TRAIN_LABEL_MOCK_RESPONSE),--mock-response $(TOPIC_TRAIN_LABEL_MOCK_RESPONSE),) \
+		--force-s3-overwrite $(TOPIC_TRAIN_FORCE_S3_OVERWRITE)
+
+topic-training-labels: $(foreach lang,$(TOPIC_TRAIN_LANGS),topic-training-label-$(lang))
+
 topic-training-smoke-infer-%: FORCE
 	@mkdir -p $(LOCAL_TOPIC_TRAIN_BASE_PATH)/smoke
 	head -n $(MALLET_SMOKE_DOCS) $(call topic_train_sample_local,$*) > $(call topic_train_smoke_sample_local,$*)
@@ -528,6 +549,7 @@ topic-training-publish-%: FORCE
 		$(call topic_train_topickeys_s3,$*) $(call topic_train_final_topickeys_s3,$*) \
 		$(call topic_train_topicwordweights_s3,$*) $(call topic_train_final_topicwordweights_s3,$*) $(if $(filter true,$(TOPIC_TRAIN_OUTPUT_DOC_TOPICS)),$(call topic_train_sample_doctopics_s3,$*) $(call topic_train_final_sample_doctopics_s3,$*),) \
 		$(call topic_train_description_s3,$*) $(call topic_train_final_description_s3,$*) \
+		$(call topic_train_labels_s3,$*) $(call topic_train_final_labels_s3,$*) \
 		$(call topic_train_smoke_assignment_s3,$*) $(call topic_train_final_smoke_assignment_s3,$*) \
 		$(call topic_train_metadata_s3,$*) $(call topic_train_final_metadata_s3,$*)
 	$(PYTHON) lib/copy_uri.py --force-s3-overwrite $(TOPIC_TRAIN_FORCE_S3_OVERWRITE) \
@@ -555,6 +577,7 @@ topic-training-all-%: FORCE
 	$(MAKE) topic-training-sample-$*
 	$(MAKE) topic-training-train-$*
 	$(MAKE) topic-training-describe-$*
+	$(MAKE) topic-training-label-$*
 	$(MAKE) topic-training-smoke-infer-$*
 
 # topic-training-from-sample-% runs the training pipeline starting from the sampling step,
@@ -564,6 +587,7 @@ topic-training-from-sample-%: FORCE
 	$(MAKE) topic-training-sample-$*
 	$(MAKE) topic-training-train-$*
 	$(MAKE) topic-training-describe-$*
+	$(MAKE) topic-training-label-$*
 	$(MAKE) topic-training-smoke-infer-$*
 
 $(call log.debug, COOKBOOK END INCLUDE: cookbook-repo-addons/topic_training.mk)

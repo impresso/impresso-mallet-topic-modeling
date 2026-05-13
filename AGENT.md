@@ -31,8 +31,11 @@ outputs produced here.
 ## Environment And Tooling
 
 - Python target version is 3.11.
-- The preferred local environments are project-local Pipenv `.venv` or a plain
-  `venv/` directory.
+- Always run Python commands inside a project virtual environment. Prefer the
+  Pipenv environment defined by `Pipfile` and use `pipenv run ...` for scripts,
+  checks, and one-off inspection commands.
+- A plain `venv/` directory is acceptable if it contains the same project
+  dependencies, but do not rely on system Python for this repository.
 - Dependencies are declared in `Pipfile`; `impresso-cookbook` is installed
   editable from `./cookbook/lib`.
 - MALLET requires Java. The MALLET binary is controlled by the `MALLET` Makefile
@@ -53,6 +56,10 @@ remake topic-training-all-en CFG=configs/config-topic-training-tm-en-all-v3.0.mk
 
 Keep `make` as the command name in Makefiles and user-facing documentation. Do
 not rename recipes, help text, docs, or `$(MAKE)` calls to `remake`.
+
+When combining Python and Make locally, prefer activating the virtual
+environment first or use `pipenv run remake ...` so Python helpers resolve the
+project dependencies (`smart_open`, `openai`, `impresso-cookbook`, etc.).
 
 ## Main Pipeline
 
