@@ -37,7 +37,7 @@ NEWSPAPER_PREFIX ?= $(PROCESS_LABEL_LINGPROC)$(PROCESS_SUBTYPE_LABEL_LINGPROC)/$
 NEWSPAPER_HAS_PROVIDER ?= 1
 
 # Topic training output.
-TOPIC_TRAIN_BUCKET ?= 130-component-sandbox
+TOPIC_TRAIN_BUCKET ?= 131-component-staging
 TOPIC_TRAIN_FINAL_BUCKET ?= 132-component-final
 TOPIC_TRAIN_PREFIX ?= topics-mallet
 TOPIC_TRAIN_RUN_ID ?= tm-de-all-v3.0

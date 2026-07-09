@@ -439,10 +439,14 @@ topic-training-train-%: topic-training-import-% FORCE
 		$(call topic_train_metadata_local,$*) $(call topic_train_metadata_s3,$*)
 
 topic-training-describe-%: FORCE
-	@mkdir -p $(LOCAL_TOPIC_TRAIN_BASE_PATH)/jsonl
+	@mkdir -p $(LOCAL_TOPIC_TRAIN_BASE_PATH)/jsonl $(LOCAL_TOPIC_TRAIN_BASE_PATH)/models
+	@if [ ! -s "$(call topic_train_topicwordweights_local,$*)" ]; then \
+		$(PYTHON) lib/copy_uri.py --force-s3-overwrite $(TOPIC_TRAIN_FORCE_S3_OVERWRITE) \
+			$(call topic_train_topicwordweights_s3,$*) $(call topic_train_topicwordweights_local,$*); \
+	fi
 	$(PYTHON) lib/mallet2topic_description_json.py \
 		-L $* \
-		-M tm-$*-$(TOPIC_TRAIN_RUN_ID) \
+		-M $(TOPIC_TRAIN_MODEL_ID) \
 		-N $(MALLET_NUM_TOPICS) \
 		-W $(TOPIC_TRAIN_WORD_THRESHOLD) \
 		-o $(call topic_train_description_local,$*) \
@@ -479,7 +483,7 @@ topic-training-smoke-infer-%: FORCE
 	$(PYTHON) lib/copy_uri.py --force-s3-overwrite $(TOPIC_TRAIN_FORCE_S3_OVERWRITE) $(call topic_train_smoke_doctopics_local,$*) $(call topic_train_smoke_doctopics_s3,$*)
 	$(PYTHON) lib/mallet2topic_assignment_jsonl.py \
 		-L $* \
-		-M tm-$*-$(TOPIC_TRAIN_RUN_ID) \
+		-M $(TOPIC_TRAIN_MODEL_ID) \
 		-T $(MALLET_TOPIC_ASSIGNMENT_THRESHOLD) \
 		$(if $(filter true,$(TOPIC_TRAIN_SMOKE_VERBOSE)),--text-tsv $(call topic_train_smoke_sample_local,$*) --topic-keys $(call topic_train_topickeys_local,$*) --topic-key-word-count 4,) \
 		$(call topic_train_smoke_doctopics_local,$*) > $(call topic_train_smoke_assignment_plain_local,$*)
