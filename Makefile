@@ -54,6 +54,9 @@ include cookbook/make_settings.mk
 # Load general setup
 include cookbook/setup.mk
 
+# Load AWS CLI setup and S3 folder move helpers
+include cookbook/aws.mk
+
 # Load newspaper list configuration and processing rules
 include cookbook/newspaper_list.mk
 

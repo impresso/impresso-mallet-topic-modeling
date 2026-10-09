@@ -49,6 +49,13 @@ outputs produced here.
   MALLET invocation so either version picks up the correct heap size.
 - Many commands require S3 access and local AWS credentials through the cookbook
   setup.
+- Every direct AWS CLI command, including examples in documentation and help,
+  must explicitly use the repository-local configuration and credentials:
+  `AWS_CONFIG_FILE=.aws/config AWS_SHARED_CREDENTIALS_FILE=.aws/credentials aws ...`.
+  Run from the repository root, following `cookbook/aws.mk`. Do not rely on
+  the user's default AWS configuration. If the local files are missing,
+  `create-aws-config` generates them from `.env` (`SE_HOST_URL`, `SE_ACCESS_KEY`,
+  and `SE_SECRET_KEY`); never print or commit their secret values.
 - Language-level eligible extraction requires GNU parallel. Inference-pipe
   creation requires `javac` as well as `java`. Live topic labeling requires
   OpenAI credentials and incurs API costs; use `TOPIC_TRAIN_LABEL_MOCK_RESPONSE`

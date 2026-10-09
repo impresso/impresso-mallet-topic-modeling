@@ -542,6 +542,10 @@ See [cookbook/README.md](cookbook/README.md) for detailed information.
 
 ## Running a Full Training Pipeline
 
+For a reviewed cycle using one config and language, follow
+[the French IPTC step-by-step recipe](step-by-step.md). It covers input checks,
+preparation, vocabulary review, training, labeling, smoke inference, and publication.
+
 Version-specific training scripts in `scripts/` orchestrate all four language models in sequence, capture per-language logs, and guide you through the mandatory vocabulary review step.
 
 ### Step 1 — Preparation (vocab + eligible texts + diagnostics)
@@ -594,7 +598,10 @@ TOPIC_TRAIN_BUCKET=132-component-final \
 
 Logs are written to `logs/train-v3.0.0-<lang>-<timestamp>.log`.
 
-Make stamp files ensure already-completed steps are skipped on re-runs. To force a specific step to re-run, delete the corresponding stamp file in `build.d/`.
+Training targets use `FORCE` and generally execute again on re-runs. Existing S3
+outputs are protected by default; set `TOPIC_TRAIN_FORCE_S3_OVERWRITE=TRUE` only
+for intentional replacements. MALLET import reuses an existing local imported
+sample; see the step-by-step recipe before changing the sample for an existing run.
 
 ### Step 3 — Build inference bundles
 
