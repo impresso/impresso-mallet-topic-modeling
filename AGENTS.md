@@ -1,10 +1,11 @@
-# AGENT.md
+# AGENTS.md
 
 ## Purpose
 
 This repository builds MALLET topic models for the Impresso corpus. It owns the
 training-side contract: vocabulary creation, eligible-text extraction, sampling,
-MALLET import/training, topic-description conversion, smoke inference, and
+character normalization, MALLET import/training, topic-description conversion,
+topic labeling, smoke inference, and
 publishing model artifacts.
 
 It does not own full-corpus topic inference. Downstream inference should consume
@@ -25,6 +26,8 @@ outputs produced here.
   extraction, sampling, MALLET output conversion, and local/S3 copying.
 - `resources/exclude-vocab/`: language-specific deny lists used by vocabulary
   filtering.
+- `resources/include-vocab/`: language-specific vocabulary inclusion lists.
+- `scripts/`: multi-language preparation, training, and inference-bundle wrappers.
 - `mallet/`: vendored MALLET executable and Java jars.
 - `PLANNING.md`: current training pipeline design and artifact layout.
 
@@ -34,10 +37,11 @@ outputs produced here.
 - Always run Python commands inside a project virtual environment. Prefer the
   Pipenv environment defined by `Pipfile` and use `pipenv run ...` for scripts,
   checks, and one-off inspection commands.
-- A plain `venv/` directory is acceptable if it contains the same project
+- A `.venv/` or plain `venv/` directory is acceptable if it contains the same project
   dependencies, but do not rely on system Python for this repository.
 - Dependencies are declared in `Pipfile`; `impresso-cookbook` is installed
-  editable from `./cookbook/lib`.
+  editable from `./cookbook/lib`. `impresso-mallet-lda` comes from the downstream
+  inference repository's `lib/` directory.
 - MALLET requires Java. The MALLET binary is controlled by the `MALLET` Makefile
   variable (default: `./mallet/bin/mallet`). Versioned distributions live in
   `mallet-X.Y.Z/` directories; configs pin the version via `MALLET ?= ./mallet-X.Y.Z/bin/mallet`.
@@ -45,6 +49,10 @@ outputs produced here.
   MALLET invocation so either version picks up the correct heap size.
 - Many commands require S3 access and local AWS credentials through the cookbook
   setup.
+- Language-level eligible extraction requires GNU parallel. Inference-pipe
+  creation requires `javac` as well as `java`. Live topic labeling requires
+  OpenAI credentials and incurs API costs; use `TOPIC_TRAIN_LABEL_MOCK_RESPONSE`
+  for a local labeling check.
 
 On macOS, do not use the system `/usr/bin/make` for execution. It is too old for
 this project. Run make targets with `remake` locally, for example:
@@ -66,22 +74,46 @@ project dependencies (`smart_open`, `openai`, `impresso-cookbook`, etc.).
 The topic-training flow is:
 
 ```text
-lemmafreq -> vocabulary -> eligible texts -> training sample -> MALLET import
-          -> MALLET training -> topic descriptions -> smoke inference -> publish
+lemmafreq -> pre-normalization vocabulary -> character normalization
+          -> normalized lemma frequencies -> vocabulary -> eligible texts
+          -> training sample -> MALLET import -> MALLET training
+          -> topic descriptions -> topic labels -> smoke inference
+          -> inference bundle -> publish
 ```
 
 The main targets are:
 
 - `topic-training-vocab-LANG`
-- `topic-training-eligible-newspaper LANG=... NEWSPAPER=...`
+- `topic-training-pre-norm-vocab-LANG`
+- `topic-training-char-normalization-LANG`
+- `topic-training-normalized-lemma-vocab-LANG`
+- `topic-training-eligible-newspaper LNG=... NEWSPAPER=...`
 - `topic-training-eligible-LANG`
+- `topic-training-singleton-lemmas-LANG`
+- `topic-training-rare-docfreq-negative-lemmas-LANG`
+- `topic-training-prepare-LANG`
 - `topic-training-sample-LANG`
 - `topic-training-import-LANG`
 - `topic-training-train-LANG`
 - `topic-training-describe-LANG`
+- `topic-training-label-LANG`
 - `topic-training-smoke-infer-LANG`
+- `topic-training-inference-pipe-LANG`
+- `topic-training-inference-config-LANG`
+- `topic-training-inference-bundle-LANG`
 - `topic-training-publish-LANG`
 - `topic-training-all-LANG`
+- `topic-training-from-sample-LANG`
+
+`topic-training-prepare-LANG` builds vocabulary and eligible texts, then runs
+rare-lemma diagnostics. Review those diagnostics and exclusions before training.
+`topic-training-from-sample-LANG` starts with sampling existing eligible texts;
+`topic-training-all-LANG` also rebuilds vocabulary and eligible texts. Both end
+with labeling and smoke inference; publishing is a separate target.
+
+Pipeline targets use `FORCE`; do not assume stamps skip completed stages.
+S3 overwrite protection defaults to `TOPIC_TRAIN_FORCE_S3_OVERWRITE=FALSE`.
+Changing this to `TRUE` requires intent to replace existing artifacts.
 
 Run-specific values should live in `configs/*.mk` and be passed with `CFG=...`.
 Avoid hard-coding run IDs, buckets, language choices, or MALLET hyperparameters
@@ -104,15 +136,24 @@ $(BUILD_DIR)/$(TOPIC_TRAIN_BUCKET)/$(TOPIC_TRAIN_PREFIX)/$(TOPIC_TRAIN_RUN_ID)/
 The expected artifact families include:
 
 - `vocab/{lang}.vocab.tsv.bz2`
+- `vocab/{lang}.pre-norm.vocab.tsv.bz2`
+- `vocab/{lang}.char-normalization.json`
+- `vocab/{lang}.normalized-lemma-vocab.json.bz2`
+- Vocabulary metadata and normalization reports under `vocab/`
 - `eligible/{newspaper}.eligible.tsv.bz2`
+- `eligible/{newspaper}.stats.json`
+- Rare-lemma word lists, document frequencies, and metadata under `diagnostics/`
 - `sample/sample.tsv.bz2`
+- `sample/sample.manifest.json`
 - `mallet/{lang}.sample.mallet`
 - `models/{lang}.model`
+- `models/{lang}.model.log`
 - `models/{lang}.inferencer`
 - `models/{lang}.topickeys`
 - `models/{lang}.topicwordweights`
 - `models/{lang}.sample.doctopics`
 - `jsonl/{lang}.topic_model_topic_description.jsonl.bz2`
+- `jsonl/{lang}.topic_labels.jsonl.gz`
 - `smoke/{lang}.*`
 - `metadata/{lang}.training.json`
 - `inference/models/tm/{model_id}.config.json`
@@ -127,6 +168,10 @@ Do not add full-corpus inference outputs to this repository's training contract.
 The `inference/models/tm/` bundle is the downstream inference contract. Its
 config records the MALLET runtime version, preprocessing mode, expected
 linguistic-processing run path, and sibling artifact filenames.
+Bundle creation uploads to the training run's S3 path. Publishing builds that
+bundle and copies artifacts to `TOPIC_TRAIN_FINAL_BUCKET` under the same prefix
+and run ID. Neither operation is local-only. Sample document-topic output is
+conditional on `TOPIC_TRAIN_OUTPUT_DOC_TOPICS`.
 
 ## Python Conventions
 
@@ -159,7 +204,7 @@ ci_id<TAB>DUMMY<TAB>lemma1 lemma2 lemma3 ...
 ## Safety Rules
 
 - Do not commit secrets, `.env`, `.aws/`, credentials, or local S3 config.
-- Treat `build/`, local compressed inputs, and untracked sample files as user or
+- Treat `build.d/`, `build/`, local compressed inputs, and untracked sample files as user or
   generated state. Do not delete them unless explicitly asked.
 - The worktree may contain modified files and local artifacts. Do not revert
   unrelated changes.
@@ -167,6 +212,9 @@ ci_id<TAB>DUMMY<TAB>lemma1 lemma2 lemma3 ...
   Avoid broad edits there unless the task explicitly concerns cookbook behavior.
 - Do not run full training, full eligible extraction, or publish targets without
   confirming intent; they can be expensive and require live S3 credentials.
+- Apply the same intent check to preparation/training wrappers, live topic
+  labeling, and inference-bundle uploads. Wrappers invoke `make` internally;
+  for local macOS execution, use their corresponding `remake` targets.
 
 ## Key Documentation Files
 
@@ -178,7 +226,7 @@ ci_id<TAB>DUMMY<TAB>lemma1 lemma2 lemma3 ...
   a user guide. Do not add operational training instructions here.
 - `PLANNING.md`: pipeline design notes and artifact layout. Useful background
   context; not a runbook.
-- `AGENT.md` (this file): agent-facing conventions, safety rules, and validation
+- `AGENTS.md` (this file): agent-facing conventions, safety rules, and validation
   steps.
 
 ## Validation
@@ -186,7 +234,7 @@ ci_id<TAB>DUMMY<TAB>lemma1 lemma2 lemma3 ...
 Low-risk checks:
 
 ```bash
-python3 -m py_compile lib/*.py
+pipenv run python -m py_compile lib/*.py
 remake help-topic-training
 ./mallet/bin/mallet --help
 ```

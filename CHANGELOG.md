@@ -7,8 +7,6 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
-## [3.0.1] - 2026-05-09
-
 ### Added
 
 - Training publish now builds an inference-facing bundle under
@@ -21,7 +19,6 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 - `scripts/build-inference-bundle-v3.0.0.sh` wraps the post-training inference
   bundle build for one or more languages.
 
-## [3.0.0] - 2026-05-08
 
 ### Added
 
