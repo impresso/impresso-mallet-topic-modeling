@@ -5,12 +5,15 @@ A comprehensive toolkit for topic modeling using MALLET (MAchine Learning for La
 ## Table of Contents
 
 - [Overview](#overview)
+- [Key Documentation Guides](#key-documentation-guides)
 - [Features](#features)
-- [Installation](#installation)
+- [Prerequisites & Installation](#prerequisites--installation)
 - [Project Structure](#project-structure)
-- [MALLET Integration](#mallet-integration)
+- [Quickstart Workflow](#quickstart-workflow)
+- [Running a Full Training Pipeline](#running-a-full-training-pipeline)
 - [Python Utilities](#python-utilities)
-- [Usage Examples](#usage-examples)
+- [MALLET Integration](#mallet-integration)
+- [Configuration](#configuration)
 - [Dependencies](#dependencies)
 - [License](#license)
 
@@ -18,22 +21,34 @@ A comprehensive toolkit for topic modeling using MALLET (MAchine Learning for La
 
 This project facilitates topic modeling workflows for historical newspaper data from the Impresso project. It bridges linguistic processing data (POS-tagged, lemmatized text) with MALLET's topic modeling capabilities and provides utilities to convert results into machine-readable JSON formats.
 
+## Key Documentation Guides
+
+- [Getting Started Guide](GETTING_STARTED.md): Step-by-step onboarding guide covering prerequisites, system setup, a 5-minute local walkthrough without credentials, data contracts, and pipeline troubleshooting.
+- [Topic Modeling Overview for Digital Humanists](documentation/topic-modeling-overview.md): High-level overview explaining why topic modeling is used for historical newspapers, what topics look like in the Impresso interface and Topic Explorer, the 8-stage pipeline, and how to read topics critically.
+- [Topic Labeling Guide](LABELING_README.md): Detailed documentation of the OpenAI LLM-based topic labeling pipeline, prompt design, JSON schema, validation, and cost management.
+- [Agent and Pipeline Specifications](AGENTS.md): Pipeline contracts, artifact layout, safety rules, and local development conventions.
+- [Release Process](RELEASE_PROCESS.md): Step-by-step checklist for release preparation and publishing.
+
 ## Features
 
-- **Token Extraction**: Extract tokens from linguistically processed newspaper data with POS tag and language filtering
-- **Frequency Distribution**: Build and filter frequency distributions across corpora
-- **Topic Model Training**: Interface with MALLET for LDA topic modeling
-- **Format Conversion**: Convert MALLET outputs to JSON/JSONL formats
-- **S3 Integration**: Read and write data directly from/to S3 storage
-- **Multi-language Support**: Process documents in multiple languages with language-specific filtering
+- **Token Extraction & Normalization**: Extract tokens from linguistically processed newspaper data with UPOS tag filtering, character normalization for historical spellings, and allow/deny lists
+- **Vocabulary Curation**: Build pre-normalized and normalized lemma vocabularies with frequency thresholds and singleton/rare document frequency diagnostics
+- **Stratified Sampling**: Sample articles deterministically across newspapers, decades, and years
+- **MALLET Topic Modeling**: Seamless interface with MALLET 2.1.0 (and 2.0.8) for LDA topic modeling
+- **LLM Topic Labeling**: Automated conceptual topic labeling via OpenAI models with schema validation and domain categorization
+- **Downstream Inference Bundling**: Package published models into standalone bundles (`.pipe`, `.inferencer`, `.vocab.tsv.bz2`, `.char-normalization.json`, and self-describing `.config.json`)
+- **S3 & Streaming Integration**: Direct read/write support for local files and AWS S3 with overwrite protections
 
-## Installation
+## Prerequisites & Installation
 
 ### Prerequisites
 
-- Python 3.11 or higher
-- Java Runtime Environment (for MALLET)
-- Pipenv (recommended) or pip
+- **Python 3.11**
+- **Java Development Kit (JDK 8+ / JDK 11+)**: includes both `java` and `javac` (required to compile `CreateMinimalMalletFile.java` for inference pipe extraction).
+- **GNU Parallel**: required for multi-threaded newspaper text extraction.
+- **Bash 4+**: required by `scripts/*.sh` (on macOS, install modern bash with `brew install bash`).
+- **remake (macOS)**: the default macOS `/usr/bin/make` is outdated; use `remake` (`brew install remake`).
+- **Pipenv** (recommended) or pip.
 
 ### Setup
 
@@ -67,25 +82,38 @@ pip install -r requirements.txt
 
 ```
 .
-├── mallet/                    # MALLET topic modeling toolkit
+├── mallet/                    # MALLET 2.0.8 distribution
 │   ├── bin/
 │   │   └── mallet            # MALLET executable script
 │   └── lib/
 │       ├── mallet.jar        # Core MALLET library
 │       └── mallet-deps.jar   # MALLET dependencies
+├── mallet-2.1.0/              # MALLET 2.1.0 distribution (used by v3.0 training configs)
+│   ├── bin/
+│   └── lib/
 │
-├── lib/                       # Python utilities
+├── lib/                       # Python & Java utilities
+│   ├── topic_vocab.py                 # Build pre-norm and final vocabularies
+│   ├── build_char_normalization_table.py # Build character normalization mapping
+│   ├── normalize_lemma_vocabulary.py  # Map lemma frequencies using char normalization
+│   ├── extract_eligible_texts.py      # Extract and filter eligible articles
+│   ├── analyze_doc_freq.py            # Singleton and rare lemma diagnostics
+│   ├── stratified_sample.py           # Stratified sampling across newspapers & time
+│   ├── label_topics.py                # LLM-based structured topic labeling
+│   ├── write_inference_model_config.py# Write inference model JSON contract
+│   ├── CreateMinimalMalletFile.java   # Strip sample instances to keep only Alphabet/Pipe
 │   ├── token_extractor.py             # Extract tokens from lingproc data
-│   ├── make_freq_dist.py              # Create frequency distributions
-│   ├── freq_filter.py                 # Filter texts by frequency
-│   ├── aggregate_freq_dist.py         # Aggregate frequency distributions
-│   ├── sampling.py                    # Sample data for topic modeling
-│   ├── lingproc2simplified_per_language.py  # Convert lingproc to simplified format
-│   ├── mallet2topic_assignment_json.py      # Convert topic assignments to JSON
-│   ├── mallet2topic_assignment_jsonl.py     # Convert topic assignments to JSONL
-│   └── mallet2topic_description_json.py     # Convert topic descriptions to JSON
+│   ├── mallet2topic_description_json.py     # Convert topic descriptions to JSON/JSONL
+│   ├── mallet2topic_assignment_jsonl.py     # Stream topic assignments to JSONL
+│   ├── copy_uri.py                    # Local/S3 copy utility with overwrite check
+│   └── s3_overwrite.py                # S3 safety guard check
 │
-├── cookbook/                  # Processing pipeline configurations
+├── configs/                   # Run-specific configurations (*.mk)
+├── cookbook/                  # Shared Impresso make cookbook
+├── cookbook-repo-addons/      # Pipeline make rules (topic_training.mk)
+├── documentation/             # Topic modeling overview & documentation
+├── resources/                 # Vocabulary deny/allow lists and character normalizations
+├── scripts/                   # Version-specific orchestration scripts
 ├── Pipfile                    # Python dependencies
 └── LICENSE                    # AGPL-3.0 license
 ```
@@ -133,342 +161,247 @@ Contains MALLET Java libraries:
 
 ## Python Utilities
 
-### Data Preparation
+The active training pipeline tools in `lib/` are standalone CLI programs that support streaming I/O, local files, and `s3://` URIs via `smart_open`.
 
-#### `token_extractor.py`
+### Vocabulary & Normalization
 
-Extracts tokens from linguistically processed (lingproc) JSONL data with filtering capabilities.
+#### `topic_vocab.py`
+
+Builds pre-normalized or final vocabularies from aggregated lemma frequency distributions.
 
 **Features:**
-
-- POS tag filtering (e.g., extract only NOUN, VERB, ADJ)
-- Language filtering for multi-lingual corpora
-- S3 file support with smart-open
-- Streaming processing for large files
+- Minimum and maximum frequency thresholds
+- Allow-lists (`--include-vocab`) and deny-lists (`--exclude-vocab`, `--negative-list`)
+- Produces TSV vocabulary output and JSON metadata sidecar
 
 **Usage:**
 
 ```bash
-python lib/token_extractor.py \
-  --input s3://bucket/lingproc/file.jsonl.bz2 \
-  --pos-tags NOUN VERB ADJ \
-  --languages de fr \
-  --output tokens.txt
-```
-
-**Input Format:** Lingproc JSONL with structure:
-
-```json
-{
-  "id": "doc-id",
-  "sents": [
-    {
-      "lg": "de",
-      "tok": [{ "t": "token", "p": "NOUN", "l": "lemma" }]
-    }
-  ]
-}
-```
-
-**Output:** Document ID followed by space-separated tokens (one document per line)
-
-#### `lingproc2simplified_per_language.py`
-
-Converts complex lingproc format to simplified per-language format suitable for topic modeling.
-
-**Features:**
-
-- Extract tokens, POS tags, and lemmas per language
-- Synchronize token-level information across sentences
-- Filter by language
-- S3 input/output support
-
-**Usage:**
-
-```bash
-python lib/lingproc2simplified_per_language.py \
-  --s3-prefix s3://bucket/lingproc/newspaper-1927.jsonl.bz2 \
+pipenv run python lib/topic_vocab.py \
+  --lemmafreq s3://bucket/lemmafreq/de.lemmafreq.json.bz2 \
   --language de \
-  --output simplified-de.jsonl
+  --min-frequency 100 \
+  --max-frequency 5000000 \
+  --exclude-vocab resources/exclude-vocab/de.txt \
+  --output vocab.tsv.bz2 \
+  --metadata-output vocab.manifest.json \
+  --run-id my-run-id
 ```
 
-**Output Format:**
+#### `build_char_normalization_table.py`
 
-```json
-{
-  "id": "doc-id",
-  "tokens": ["token1", "token2"],
-  "pos_tags": ["NOUN", "VERB"],
-  "lemmas": ["lemma1", "lemma2"]
-}
-```
-
-### Frequency Analysis
-
-#### `make_freq_dist.py`
-
-Creates frequency distributions over corpora for vocabulary pruning.
+Discovers OCR noise and historical character variations from pre-normalized vocabulary distributions and generates a character mapping table.
 
 **Features:**
-
-- Multiprocessing support for large corpora
-- Per-language frequency tracking
-- Punctuation filtering
-- Outputs sorted frequency lists
+- Suggests ASCII/standard character mappings for non-standard codepoints
+- Generates comprehensive mapping and optional diagnostic report (`--report-json`)
 
 **Usage:**
 
 ```bash
-python lib/make_freq_dist.py \
-  --input-dir data/json/ \
-  --output-dir resources/freqdists/
+pipenv run python lib/build_char_normalization_table.py \
+  --min-count 50 \
+  --report-json char-normalization.report.json \
+  vocab.pre-norm.json.bz2 \
+  char-normalization.json
 ```
 
-**Output:** TSV files with `count\ttoken` format per language
+#### `normalize_lemma_vocabulary.py`
 
-#### `aggregate_freq_dist.py`
-
-Aggregates multiple frequency distribution files into a single distribution.
-
-**Usage:**
-
-```bash
-python lib/aggregate_freq_dist.py
-```
-
-Reads from `resources/freqdists/*` and outputs aggregated counts.
-
-#### `freq_filter.py`
-
-Filters texts using frequency distribution files to remove rare/common words.
+Applies character normalization mappings to raw lemma frequencies to consolidate spelling variants before final vocabulary creation.
 
 **Features:**
-
-- Minimum/maximum frequency thresholds
-- Multiprocessing for performance
-- Preserves document structure
+- Applies boundary stripping, core token preservation, and alphabetic ratio checks
+- Aggregates frequencies across normalized lemmas
 
 **Usage:**
 
 ```bash
-python lib/freq_filter.py \
-  --input-dir data/json/ \
-  --freq-dist resources/freqdists/de.txt \
-  --min-freq 5 \
-  --max-freq 10000 \
-  --output-dir filtered/
+pipenv run python lib/normalize_lemma_vocabulary.py \
+  lemmafreq.json.bz2 \
+  char-normalization.json \
+  normalized-lemma-vocab.json.bz2
 ```
 
-#### `sampling.py`
+### Data Preparation & Extraction
 
-Samples documents from large corpora for topic modeling experiments.
+#### `extract_eligible_texts.py`
+
+Extracts eligible text instances from linguistic processing (`lingproc`) JSONL files.
 
 **Features:**
-
-- Random sampling with fixed seed (reproducibility)
-- Configurable sample size
-- Maintains UTF-8 encoding
+- Validates tokens against the vocabulary and character normalization table
+- Filters by UPOS tag (e.g. `NOUN`, `PROPN`)
+- Filters documents by minimum token count, unique lemmas, and maximum length
+- Outputs MALLET TSV rows (`doc_id\tDUMMY\tlemma1 lemma2 ...`) and execution statistics
 
 **Usage:**
 
 ```bash
-python lib/sampling.py \
-  --input corpus.txt \
-  --sample-size 10000 \
-  --output sample.txt
+pipenv run python lib/extract_eligible_texts.py \
+  --input s3://bucket/lingproc/newspaper-1920.jsonl.bz2 \
+  --vocab vocab.tsv.bz2 \
+  --char-normalization char-normalization.json \
+  --language de \
+  --pos-tags NOUN PROPN \
+  --min-vocab-tokens 20 \
+  --output eligible.tsv.bz2 \
+  --stats-output stats.json \
+  --run-id my-run-id
 ```
 
-### MALLET Output Conversion
+#### `analyze_doc_freq.py`
 
-#### `mallet2topic_assignment_json.py`
-
-Converts MALLET topic assignment output to JSON format.
-
-**Supported Formats:**
-
-- **Matrix Format**: Dense probability distributions per document
-- **Sparse Format**: Only non-zero topic probabilities
+Scans extracted eligible texts to calculate document frequencies for rare and singleton lemmas.
 
 **Features:**
-
-- Filters topics by minimum probability threshold
-- Configurable top-N topics per document
-- Extracts document IDs from file paths
+- Identifies lemmas appearing in only 1 document (singletons) or few documents
+- Highlights potential OCR errors and outliers to review before final sampling and training
 
 **Usage:**
 
 ```bash
-python lib/mallet2topic_assignment_json.py \
-  --input doc-topics.txt \
-  --format sparse \
-  --min-prob 0.01 \
-  --top-n 5 \
-  --output assignments.json
+pipenv run python lib/analyze_doc_freq.py \
+  --input-prefix s3://bucket/eligible/ \
+  --language de \
+  --max-doc-freq 2 \
+  --output rare-lemmas.tsv.bz2
 ```
 
-**Input Format (Sparse):**
+#### `stratified_sample.py`
 
-```
-0  doc-id  56  0.3638  653  0.0608  718  0.0355
+Draws reproducible, stratified samples from eligible text collections across newspapers and time periods.
+
+**Features:**
+- Deterministic sampling with explicit seed (`--seed`)
+- Stratification across newspapers and decades/years
+- Configurable stratum caps (`--min-per-stratum`, `--max-per-stratum`)
+- Produces sample TSV for MALLET import and a complete provenance manifest
+
+**Usage:**
+
+```bash
+pipenv run python lib/stratified_sample.py \
+  --s3-prefix s3://bucket/eligible/ \
+  --sample-size 100000 \
+  --seed 42 \
+  --strata newspaper,decade \
+  --language de \
+  --output sample.tsv.bz2 \
+  --manifest-output sample.manifest.json \
+  --run-id my-run-id
 ```
 
-**Output Format:**
+### Topic Labeling & Output Conversion
 
-```json
-{
-  "doc-id": [
-    { "topic_id": 56, "probability": 0.3638 },
-    { "topic_id": 653, "probability": 0.0608 }
-  ]
-}
+#### `label_topics.py`
+
+Generates human-readable, conceptual topic labels from MALLET topic descriptions using OpenAI models (or offline mock files).
+
+**Features:**
+- Structured JSON output conforming to strict schema (short label, long label, category, confidence, rationale)
+- Validates that representative words appear literally in the topic word list
+- Categorizes topics into 17 standard domains (political, OCR noise, sports, etc.)
+- Batch processing with prompt size bounds
+
+**Usage:**
+
+```bash
+pipenv run python lib/label_topics.py \
+  --input topic_model_topic_description.jsonl.bz2 \
+  --output topic_labels.jsonl.gz \
+  --model gpt-4o-mini
 ```
+
+See [LABELING_README.md](LABELING_README.md) for complete details on prompt guidelines, JSON schemas, and mock testing.
 
 #### `mallet2topic_assignment_jsonl.py`
 
-Streaming version that outputs JSONL (one JSON object per line).
+Converts MALLET's document-topic distributions into memory-efficient JSONL lines.
 
 **Features:**
-
-- Memory-efficient streaming processing
-- Supports both local and S3 files
-- Progress logging every 1000 lines
-- Configurable probability thresholds
+- Streaming converter for large corpora
+- Filters by minimum topic probability threshold (`--min-prob`)
+- Local and S3 input/output support
 
 **Usage:**
 
 ```bash
-python lib/mallet2topic_assignment_jsonl.py \
+pipenv run python lib/mallet2topic_assignment_jsonl.py \
   --input doc-topics.txt \
-  --output assignments.jsonl \
+  --output assignments.jsonl.bz2 \
   --min-prob 0.05
-```
-
-**Output Format (JSONL):**
-
-```jsonl
-{"id": "doc1", "topics": [{"topic_id": 5, "prob": 0.4}, {"topic_id": 12, "prob": 0.3}]}
-{"id": "doc2", "topics": [{"topic_id": 8, "prob": 0.6}]}
 ```
 
 #### `mallet2topic_description_json.py`
 
-Converts MALLET topic-keys output to structured JSON format with word probabilities.
-
-**Features:**
-
-- Normalizes word probabilities per topic
-- Filters words by minimum probability
-- Top-N words per topic
-- Multiple output formats (single JSON or per-topic files)
+Converts MALLET's `topic-keys` and word weights to structured JSON/JSONL format.
 
 **Usage:**
 
 ```bash
-python lib/mallet2topic_description_json.py \
+pipenv run python lib/mallet2topic_description_json.py \
   --input topic-keys.txt \
-  --min-prob 0.001 \
-  --top-n 100 \
-  --output topics.json
+  --output topic_descriptions.jsonl.bz2 \
+  --top-n 100
 ```
 
-**Input Format:**
+#### `write_inference_model_config.py`
 
-```
-0  0.05  word1 word2 word3 ...
-```
+Generates the self-describing model metadata `.config.json` that binds the inferencer, alphabet pipe, vocabulary, character normalization, and topic descriptions for downstream inference.
 
-**Output Format:**
-
-```json
-{
-  "topic_0": {
-    "topic_id": 0,
-    "word_count": 100,
-    "words": [
-      { "word": "word1", "probability": 0.15 },
-      { "word": "word2", "probability": 0.12 }
-    ]
-  }
-}
-```
-
-## Usage Examples
-
-### Complete Topic Modeling Workflow
+**Usage:**
 
 ```bash
-# 1. Extract tokens from lingproc data
-python lib/token_extractor.py \
-  --input s3://bucket/lingproc/newspaper-1927.jsonl.bz2 \
-  --pos-tags NOUN VERB ADJ \
-  --languages de \
-  --output mallet-input.txt
-
-# 2. Import into MALLET format
-./mallet/bin/mallet import-file \
-  --input mallet-input.txt \
-  --output corpus.mallet \
-  --keep-sequence
-
-# 3. Train topic model (50 topics, 1000 iterations)
-./mallet/bin/mallet train-topics \
-  --input corpus.mallet \
-  --num-topics 50 \
-  --num-iterations 1000 \
-  --output-state topic-state.gz \
-  --output-doc-topics doc-topics.txt \
-  --output-topic-keys topic-keys.txt \
-  --optimize-interval 10 \
-  --num-threads 4
-
-# 4. Convert outputs to JSON
-python lib/mallet2topic_description_json.py \
-  --input topic-keys.txt \
-  --output topics.json
-
-python lib/mallet2topic_assignment_jsonl.py \
-  --input doc-topics.txt \
-  --output assignments.jsonl \
-  --min-prob 0.05
+pipenv run python lib/write_inference_model_config.py \
+  --output tm-de-all-v3.0.config.json \
+  --model-id tm-de-all-v3.0 \
+  --language de \
+  --topic-count 100 \
+  --mallet-version 2.1.0 \
+  --mallet-runtime ./mallet-2.1.0/bin/mallet \
+  --preprocessing-mode normalized-lemma \
+  --upos-filter NOUN,PROPN \
+  --lowercase-token true \
+  --min-lemma-length 2 \
+  --min-vocab-tokens 20 \
+  --min-unique-lemmas 10 \
+  --include-titles false \
+  --expected-lingproc-run-id v3.0 \
+  --expected-lingproc-s3-base s3://130-component-sandbox/lingproc \
+  --inferencer tm-de-all-v3.0.inferencer \
+  --pipe tm-de-all-v3.0.pipe \
+  --vocab tm-de-all-v3.0.vocab.tsv.bz2 \
+  --char-normalization tm-de-all-v3.0.char-normalization.json \
+  --topic-description tm-de-all-v3.0.topic_model_topic_description.jsonl.bz2
 ```
 
-### Working with S3 Data
+## Quickstart Workflow
+
+For a standard training run across the corpus, versioned bash wrappers in `scripts/` orchestrate multi-language execution in sequence.
 
 ```bash
-# Extract tokens directly from S3
-python lib/token_extractor.py \
-  --input s3://42-processed-data/lingproc/newspaper.jsonl.bz2 \
-  --pos-tags NOUN \
-  --output tokens.txt
+# 1. Prepare vocabularies, eligible texts, and diagnostic lists for all languages:
+./scripts/prepare-v3.0.0.sh
 
-# Convert and upload to S3
-python lib/lingproc2simplified_per_language.py \
-  --s3-prefix s3://input-bucket/lingproc/ \
-  --language fr \
-  --output s3://output-bucket/simplified/fr.jsonl
+# 2. Review diagnostic outputs (singletons & rare words) in build.d/ or logs/
+# Add noise terms to resources/exclude-vocab/<lang>.txt if needed.
+
+# 3. Train topic models (sample -> MALLET import -> LDA train -> descriptions -> LLM labels -> smoke inference):
+./scripts/train-v3.0.0.sh
+
+# 4. Build downstream inference bundles (config, pipe, inferencer, vocab, normalization):
+./scripts/build-inference-bundle-v3.0.0.sh
 ```
 
-### Frequency-Based Filtering
+Or run single language targets via Make (`remake` on macOS):
 
 ```bash
-# 1. Build frequency distribution
-python lib/make_freq_dist.py \
-  --input-dir data/processed/ \
-  --output-dir freqdists/
+# Prepare German model inputs:
+remake topic-training-prepare-de CFG=configs/config-topic-training-tm-de-all-v3.0.mk
 
-# 2. Filter corpus (remove words appearing < 5 or > 10000 times)
-python lib/freq_filter.py \
-  --input-dir data/processed/ \
-  --freq-dist freqdists/de.txt \
-  --min-freq 5 \
-  --max-freq 10000 \
-  --output-dir data/filtered/
-
-# 3. Sample for quick experiments
-python lib/sampling.py \
-  --input data/filtered/corpus.txt \
-  --sample-size 5000 \
-  --output sample-5k.txt
+# Run training from existing sample:
+remake topic-training-from-sample-de CFG=configs/config-topic-training-tm-de-all-v3.0.mk
 ```
 
 ## Dependencies
@@ -507,10 +440,21 @@ pip install git+https://github.com/impresso/impresso-mallet-topic-inference.git@
 
 ### Environment Variables
 
-Configure memory for MALLET:
+Configure memory for MALLET (note: `MEMORY` is read by MALLET 2.0.8, while `MALLET_MEMORY` is used by MALLET 2.1.0; Makefile targets export both automatically):
 
 ```bash
-export MEMORY=4g  # Allocate 4GB to MALLET (default: 1g)
+export MEMORY=4g         # MALLET 2.0.8 (default: 1g)
+export MALLET_MEMORY=4g  # MALLET 2.1.0 (default: 1g)
+```
+
+Configure OpenAI credentials for topic labeling (optional, incurred during `topic-training-label-*`):
+
+```bash
+export OPENAI_API_KEY=your_openai_key
+# Optional model override (defaults to gpt-4o-mini):
+export TOPIC_TRAIN_LABEL_MODEL=gpt-4o-mini
+# Or use mock responses for cost-free testing:
+export TOPIC_TRAIN_LABEL_MOCK_RESPONSE=TRUE
 ```
 
 ### S3 Authentication
