@@ -23,6 +23,7 @@ This project facilitates topic modeling workflows for historical newspaper data 
 
 ## Key Documentation Guides
 
+- [Getting Started Guide](GETTING_STARTED.md): Step-by-step onboarding guide covering prerequisites, system setup, a 5-minute local walkthrough without credentials, data contracts, and pipeline troubleshooting.
 - [Topic Modeling Overview for Digital Humanists](documentation/topic-modeling-overview.md): High-level overview explaining why topic modeling is used for historical newspapers, what topics look like in the Impresso interface and Topic Explorer, the 8-stage pipeline, and how to read topics critically.
 - [Topic Labeling Guide](LABELING_README.md): Detailed documentation of the OpenAI LLM-based topic labeling pipeline, prompt design, JSON schema, validation, and cost management.
 - [Agent and Pipeline Specifications](AGENTS.md): Pipeline contracts, artifact layout, safety rules, and local development conventions.
